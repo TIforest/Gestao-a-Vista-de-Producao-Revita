@@ -1,7 +1,14 @@
 import * as XLSX from "xlsx";
 import type { Apontamento } from "../types";
-import { excelValueToLocalISO, todayBrazilISODate } from "./date";
+import { combineDateTimeCells, todayBrazilISODate } from "./date";
 import { sha256Hex } from "./hash";
+
+function toNumber(raw: unknown): number {
+  if (raw === null || raw === undefined) return 0;
+  if (typeof raw === "number") return raw;
+  const n = Number(String(raw).trim().replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
 
 // Aliases de cabeçalho reconhecidos (sem acento, maiúsculo, aparados).
 // Se a planilha do gestor usar nomes diferentes, ajuste as listas abaixo.
@@ -53,7 +60,11 @@ export async function parseWorkbook(buffer: ArrayBuffer, sheetName?: string): Pr
   const sheet = workbook.Sheets[targetSheet as string];
   if (!sheet) return { rows: [], warnings: [`Aba "${targetSheet}" não encontrada na planilha.`] };
 
-  const table: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: false });
+  // raw:true entrega valores nativos (Date para células de data/hora com
+  // cellDates, number para células numéricas) em vez de texto formatado —
+  // muito mais confiável do que tentar decifrar strings pré-formatadas
+  // (formato de data/hora e separador decimal variam por planilha/locale).
+  const table: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
   if (table.length < 2) return { rows: [], warnings: ["Planilha vazia ou sem linhas de dados."] };
 
   const headers = (table[0] as unknown[]).map((h) => String(h ?? ""));
@@ -78,11 +89,9 @@ export async function parseWorkbook(buffer: ArrayBuffer, sheetName?: string): Pr
 
     const get = (idx: number) => (idx === -1 ? null : line[idx] ?? null);
 
-    const dateOnlyVal = dateOnlyCol !== -1 ? get(dateOnlyCol) : null;
-    const dateOnlyISO =
-      dateOnlyVal instanceof Date ? (dateOnlyVal.toISOString().slice(0, 10)) : typeof dateOnlyVal === "string" ? dateOnlyVal.trim() : undefined;
-
-    const dataHora = excelValueToLocalISO(get(col.data_hora), dateOnlyISO ?? today);
+    const dateCell = dateOnlyCol !== -1 ? get(dateOnlyCol) : null;
+    const timeCell = get(col.data_hora);
+    const dataHora = combineDateTimeCells(dateCell, timeCell, today);
     if (!dataHora) {
       warnings.push(`Linha ${r + 1}: data/hora inválida ou não reconhecida, registro ignorado.`);
       continue;
@@ -92,9 +101,8 @@ export async function parseWorkbook(buffer: ArrayBuffer, sheetName?: string): Pr
     const turmaVal = String(get(col.turma) ?? "").trim().toUpperCase();
     const maquinaVal = normalizeMaquina(get(col.maquina));
     const numeroFardoRaw = get(col.numero_fardo);
-    const numeroFardo = numeroFardoRaw === null ? null : Number(String(numeroFardoRaw).replace(",", "."));
-    const pesoRaw = get(col.peso_seco);
-    const peso = pesoRaw === null ? 0 : Number(String(pesoRaw).replace(",", "."));
+    const numeroFardo = numeroFardoRaw === null ? null : toNumber(numeroFardoRaw);
+    const peso = toNumber(get(col.peso_seco));
 
     if (!loteVal || !turmaVal || !maquinaVal) {
       warnings.push(`Linha ${r + 1}: faltam campos obrigatórios (lote/turma/máquina), registro ignorado.`);

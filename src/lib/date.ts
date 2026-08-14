@@ -40,29 +40,62 @@ export function monthBoundsLocal(yearMonth: string): { start: string; end: strin
   return { start, end };
 }
 
-/** Converte um valor de célula Excel (Date já parseado pelo SheetJS com cellDates, ou string) para ISO local sem timezone. */
-export function excelValueToLocalISO(value: unknown, fallbackDateISO?: string): string | null {
-  if (value instanceof Date) {
-    // SheetJS entrega o Date "como se fosse UTC" representando o valor local da planilha.
-    const iso = value.toISOString();
-    return iso.slice(0, 19);
+interface DateParts {
+  y: number;
+  m: number; // 1-12
+  d: number;
+}
+interface TimeParts {
+  h: number;
+  min: number;
+  s: number;
+}
+
+/**
+ * Extrai ano/mês/dia de uma célula de data. SheetJS (com cellDates+raw:true)
+ * entrega Date "naive-UTC": os getters UTC reproduzem exatamente o valor
+ * exibido na planilha, sem qualquer conversão de fuso horário real.
+ */
+export function dateParts(cell: unknown): DateParts | null {
+  if (cell instanceof Date) {
+    return { y: cell.getUTCFullYear(), m: cell.getUTCMonth() + 1, d: cell.getUTCDate() };
   }
-  if (typeof value === "string") {
-    const trimmed = value.trim();
-    // Só hora, ex "13:38:00" — combina com a data de referência (hoje ou coluna "Data" separada).
-    if (/^\d{1,2}:\d{2}(:\d{2})?$/.test(trimmed) && fallbackDateISO) {
-      const [h, min, s] = trimmed.split(":");
-      return `${fallbackDateISO}T${h?.padStart(2, "0")}:${min}:${s ?? "00"}`;
-    }
-    // Data completa, ex "2026-08-14 13:38:00" ou "14/08/2026 13:38:00"
-    const isoLike = trimmed.replace(" ", "T");
-    if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(isoLike)) return isoLike.slice(0, 19);
-    const brMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})[ T]?(\d{1,2}:\d{2}(:\d{2})?)?/);
-    if (brMatch) {
-      const [, dd, mm, yyyy, time] = brMatch;
-      const hhmmss = time ?? "00:00:00";
-      return `${yyyy}-${mm?.padStart(2, "0")}-${dd?.padStart(2, "0")}T${hhmmss.length === 5 ? hhmmss + ":00" : hhmmss}`;
+  if (typeof cell === "string") {
+    const s = cell.trim();
+    let m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/); // ISO: YYYY-MM-DD
+    if (m) return { y: Number(m[1]), m: Number(m[2]), d: Number(m[3]) };
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/); // BR: DD/MM/AAAA
+    if (m) return { y: Number(m[3]), m: Number(m[2]), d: Number(m[1]) };
+    m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/); // US: M/D/AA (formato real da planilha Revita)
+    if (m) return { y: 2000 + Number(m[3]), m: Number(m[1]), d: Number(m[2]) };
+  }
+  return null;
+}
+
+/** Extrai hora/minuto/segundo de uma célula de hora (Date "naive-UTC" ou texto "HH:MM[:SS][ AM/PM]"). */
+export function timeParts(cell: unknown): TimeParts | null {
+  if (cell instanceof Date) {
+    return { h: cell.getUTCHours(), min: cell.getUTCMinutes(), s: cell.getUTCSeconds() };
+  }
+  if (typeof cell === "string") {
+    const m = cell.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
+    if (m) {
+      let h = Number(m[1]);
+      const ampm = m[4]?.toUpperCase();
+      if (ampm === "PM" && h < 12) h += 12;
+      if (ampm === "AM" && h === 12) h = 0;
+      return { h, min: Number(m[2]), s: m[3] ? Number(m[3]) : 0 };
     }
   }
   return null;
+}
+
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+/** Combina uma célula de data e uma de hora (ou uma célula única com os dois) em ISO local "sem Z". */
+export function combineDateTimeCells(dateCell: unknown, timeCell: unknown, fallbackDateISO?: string): string | null {
+  const d = dateParts(dateCell) ?? dateParts(timeCell) ?? (fallbackDateISO ? dateParts(fallbackDateISO) : null);
+  if (!d) return null;
+  const t = timeParts(timeCell) ?? timeParts(dateCell) ?? { h: 0, min: 0, s: 0 };
+  return `${d.y}-${pad2(d.m)}-${pad2(d.d)}T${pad2(t.h)}:${pad2(t.min)}:${pad2(t.s)}`;
 }
