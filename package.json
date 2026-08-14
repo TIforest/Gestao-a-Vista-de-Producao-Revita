@@ -1,0 +1,24 @@
+{
+  "name": "revita-painel-producao",
+  "version": "1.0.0",
+  "description": "Gestão à Vista de Produção - Revita (Cloudflare Workers + D1)",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "db:migrate:local": "wrangler d1 migrations apply revita-producao-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply revita-producao-db --remote"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260814.1",
+    "typescript": "^7.0.2",
+    "wrangler": "^4.123.0"
+  },
+  "dependencies": {
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}

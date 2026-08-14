@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Gestão à Vista de Produção - Revita</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">♻</span>
+      <span class="brand-name">Revita</span>
+    </div>
+    <h1 class="title">GESTÃO À VISTA DE PRODUÇÃO</h1>
+    <div class="topbar-actions">
+      <span id="syncInfo" class="sync-info">—</span>
+      <button id="btnRefresh" class="btn btn-ghost" title="Atualizar dados agora">↻ Atualizar</button>
+      <button id="btnExport" class="btn btn-ghost" title="Exportar para Excel">⬇ Exportar Excel</button>
+      <button id="btnGestor" class="btn btn-primary" title="Área do gestor">⚙ Gestor</button>
+    </div>
+  </header>
+
+  <main class="grid">
+    <aside class="panel turmas-panel">
+      <div class="panel-label">TURMAS</div>
+      <div id="turmasList" class="turmas-list"></div>
+    </aside>
+
+    <section class="panel producao-turma-panel">
+      <div class="panel-title">PRODUÇÃO X TURMA</div>
+      <div id="producaoTurmaChart" class="hbar-chart"></div>
+      <div class="legend">
+        <span><i class="dot dot-green"></i>Soma de Peso Seco 51%</span>
+        <span><i class="dot dot-blue"></i>Meta do dia</span>
+      </div>
+    </section>
+
+    <section class="panel mes-panel">
+      <div class="panel-title">PRODUÇÃO ACUMULADA DO MÊS</div>
+      <div id="producaoMesValor" class="big-number">—</div>
+      <div id="mesLabel" class="month-pill">—</div>
+    </section>
+
+    <section class="panel desaguadoras-panel">
+      <div class="panel-title">PRODUÇÃO X DESAGUADORAS</div>
+      <div id="desaguadorasChart" class="hbar-chart hbar-chart--tall"></div>
+      <div class="legend">
+        <span><i class="dot dot-green"></i>Soma de Peso Seco 51%</span>
+        <span><i class="dot dot-blue"></i>Meta Produção</span>
+      </div>
+    </section>
+
+    <section class="panel hora-panel">
+      <div class="panel-title">META DE PRODUÇÃO X HORA</div>
+      <div id="horaChart" class="hbar-chart hbar-chart--single"></div>
+      <div class="legend">
+        <span><i class="dot dot-green"></i>Produção Média por Hora</span>
+        <span><i class="dot dot-blue"></i>Meta por Hora</span>
+      </div>
+    </section>
+
+    <section class="panel turno-panel">
+      <div class="panel-title">PRODUÇÃO TOTAL DO TURNO</div>
+      <div id="gaugeTurno" class="gauge"></div>
+    </section>
+
+    <section class="panel dia-panel">
+      <div class="panel-title">PRODUÇÃO TOTAL DO DIA</div>
+      <div id="gaugeDia" class="gauge"></div>
+    </section>
+
+    <section class="panel meta-atingida-panel">
+      <div class="panel-title">% DA META ATINGIDA</div>
+      <div id="metaAtingidaChart" class="meta-bar"></div>
+      <div class="legend">
+        <span><i class="dot dot-green"></i>Produção do Turno</span>
+        <span><i class="dot dot-red"></i>Falta Meta</span>
+      </div>
+    </section>
+
+    <section class="panel tabela-panel">
+      <div class="panel-title">ÚLTIMOS APONTAMENTOS</div>
+      <div class="table-wrap">
+        <table id="tabelaApontamentos">
+          <thead>
+            <tr>
+              <th>Lote</th>
+              <th>Cliente</th>
+              <th>Número do Fardo</th>
+              <th>TURMA</th>
+              <th>Soma de Peso Seco 51%</th>
+              <th>Hora do Apontamento</th>
+              <th>Máquina</th>
+              <th>Produto</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="gestorDialog" class="dialog">
+    <form method="dialog" id="gestorForm">
+      <h2>Área do Gestor</h2>
+
+      <div id="loginBlock">
+        <label>Token de acesso do gestor
+          <input type="password" id="adminToken" autocomplete="off" />
+        </label>
+        <button type="button" id="btnLogin" class="btn btn-primary">Entrar</button>
+        <p class="hint">Token configurado pelo administrador do painel (ADMIN_TOKEN).</p>
+      </div>
+
+      <div id="metasBlock" hidden>
+        <fieldset>
+          <legend>Meta do dia</legend>
+          <label>Meta do dia (kg)
+            <input type="number" id="metaDiaValor" min="0" step="0.01" />
+          </label>
+          <label>Turnos por dia
+            <input type="number" id="turnosPorDia" min="1" step="1" value="4" />
+          </label>
+          <label>Horas por turno
+            <input type="number" id="horasPorTurno" min="1" step="0.5" value="6" />
+          </label>
+          <button type="button" id="btnSalvarMetaDia" class="btn btn-primary">Salvar meta do dia</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Meta do mês</legend>
+          <label>Meta do mês (kg)
+            <input type="number" id="metaMesValor" min="0" step="0.01" />
+          </label>
+          <button type="button" id="btnSalvarMetaMes" class="btn btn-primary">Salvar meta do mês</button>
+        </fieldset>
+
+        <fieldset>
+          <legend>Upload manual da planilha</legend>
+          <input type="file" id="uploadArquivo" accept=".xlsx,.xls" />
+          <button type="button" id="btnUpload" class="btn btn-primary">Enviar e sincronizar</button>
+        </fieldset>
+
+        <p id="gestorMsg" class="hint"></p>
+      </div>
+
+      <button type="button" id="btnFecharGestor" class="btn btn-ghost">Fechar</button>
+    </form>
+  </dialog>
+
+  <script src="/app.js"></script>
+</body>
+</html>

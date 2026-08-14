@@ -1,0 +1,47 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "revita-painel-producao",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
+  },
+
+  // Painel estático (public/) servido pelo mesmo Worker.
+  // Rotas /api/* sempre passam pelo Worker; o resto é servido como asset.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Preencher database_id após rodar: wrangler d1 create revita-producao-db
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "revita-producao-db",
+      "database_id": "COLOQUE_AQUI_O_DATABASE_ID",
+      "migrations_dir": "./migrations"
+    }
+  ],
+
+  // Verifica o Excel do SharePoint a cada 1 minuto (checagem barata via
+  // lastModifiedDateTime); só baixa/reprocessa a planilha quando ela
+  // realmente mudou. Veja SETUP.md sobre o limite de CPU do plano Free.
+  "triggers": {
+    "crons": ["* * * * *"]
+  },
+
+  "vars": {
+    // Quantidade de turnos (janelas de horário) por dia e horas por turno.
+    // Usados para derivar meta/turno e meta/hora a partir da meta do dia.
+    // Podem ser sobrescritos pelo gestor via /api/metas (config fica no D1).
+    "TURNOS_POR_DIA_PADRAO": "4",
+    "HORAS_POR_TURNO_PADRAO": "6",
+    "DESAGUADORAS": "01,02,03,04",
+    "TURMAS": "A,B,C,D,E"
+  }
+}

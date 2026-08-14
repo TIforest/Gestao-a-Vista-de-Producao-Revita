@@ -1,0 +1,28 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    name: Deploy no Cloudflare Workers
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Type-check
+        run: |
+          npm install
+          npx tsc --noEmit
+
+      # Publica o Worker (código + painel estático). Não roda migração de
+      # banco automaticamente — mudanças de schema em migrations/ continuam
+      # aplicadas manualmente (veja SETUP.md), pra evitar alterar dados de
+      # produção sem revisão.
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
