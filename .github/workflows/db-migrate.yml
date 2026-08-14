@@ -1,0 +1,21 @@
+name: DB Migrate
+
+# Só roda quando disparado manualmente (aba Actions → DB Migrate → Run workflow).
+# De propósito: mudança de schema em banco de produção merece um clique
+# consciente, não um push automático.
+on:
+  workflow_dispatch:
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    name: Aplicar migrations no D1 remoto
+    steps:
+      - uses: actions/checkout@v6
+      - run: npm install
+      - name: Aplicar migrations
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: d1 migrations apply revita-producao-db --remote

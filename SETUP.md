@@ -29,18 +29,20 @@ Precisa de alguém com permissão de administrador no Microsoft 365 / Azure AD d
 Esse app só recebe permissão de **leitura**; ele não escreve nada na planilha do SharePoint.
 
 ## 4. Criar os recursos no Cloudflare
+Banco D1 `revita-producao-db` já criado no painel (conta `7ce2347a5c26e50ba4ff191d3a173084`), `database_id` já preenchido em `wrangler.jsonc`.
+
+**Atenção:** se for rodar comandos `wrangler` nesta máquina, confira antes com `npx wrangler whoami` — durante o setup encontramos uma sessão OAuth já logada aqui numa conta Cloudflare diferente ("Gustavo.oliveira@forest.ind.br's Account", `b780fecba22b416b28b057fef5fa7797`), não a `7ce2347a5c26e50ba4ff191d3a173084` deste projeto. Rode `npx wrangler login` de novo escolhendo a conta certa antes de qualquer comando `--remote`, ou prefira os workflows do GitHub Actions abaixo (que já usam o token certo via secret).
+
 ```bash
 npm install
-npx wrangler login
 
-# cria o banco D1 e copia o database_id retornado para wrangler.jsonc
-npx wrangler d1 create revita-producao-db
-# cole o database_id em wrangler.jsonc -> d1_databases[0].database_id
-
-# aplica o schema no banco remoto
+# aplica o schema no banco remoto — prefira rodar via GitHub Actions:
+# aba Actions → "DB Migrate" → Run workflow (usa o secret CLOUDFLARE_API_TOKEN,
+# já na conta certa). Alternativa local, só se tiver certeza da conta logada:
 npx wrangler d1 migrations apply revita-producao-db --remote
 
-# segredos (não fica no código, fica só na Cloudflare)
+# segredos (não fica no código, fica só na Cloudflare — precisa estar logado
+# na conta certa pra rodar isso local)
 npx wrangler secret put MS_TENANT_ID
 npx wrangler secret put MS_CLIENT_ID
 npx wrangler secret put MS_CLIENT_SECRET
