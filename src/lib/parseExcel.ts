@@ -53,7 +53,11 @@ export interface ParseResult {
   warnings: string[];
 }
 
-export async function parseWorkbook(buffer: ArrayBuffer, sheetName?: string): Promise<ParseResult> {
+export async function parseWorkbook(
+  buffer: ArrayBuffer,
+  sheetName?: string,
+  windowStartISO?: string
+): Promise<ParseResult> {
   const warnings: string[] = [];
   const workbook = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
   const targetSheet = sheetName && workbook.Sheets[sheetName] ? sheetName : workbook.SheetNames[0];
@@ -96,6 +100,11 @@ export async function parseWorkbook(buffer: ArrayBuffer, sheetName?: string): Pr
       warnings.push(`Linha ${r + 1}: data/hora inválida ou não reconhecida, registro ignorado.`);
       continue;
     }
+    // Fora da janela recente (ex.: dias anteriores) — pula ANTES do hash
+    // (parte mais cara), sem gerar aviso: é poda normal, não erro de dado.
+    // O painel não guarda histórico de linhas, só o suficiente pro dia/turno
+    // atual; a produção do mês é somada à parte (ver producao_mensal).
+    if (windowStartISO && dataHora < windowStartISO) continue;
 
     const loteVal = String(get(col.lote) ?? "").trim();
     const turmaVal = String(get(col.turma) ?? "").trim().toUpperCase();

@@ -17,6 +17,13 @@ export function currentBrazilYearMonth(): string {
   return nowBrazil().toISOString().slice(0, 7);
 }
 
+/** ISO local (Brasília) de N dias atrás, à meia-noite — usado como início da janela de retenção. */
+export function daysAgoLocalISOStart(days: number): string {
+  const d = nowBrazil();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10) + "T00:00:00";
+}
+
 /** Início/fim (exclusivo) do dia informado (YYYY-MM-DD), em ISO local "sem Z" — comparável a data_hora armazenada. */
 export function dayBoundsLocal(dateISO: string): { start: string; end: string } {
   const start = `${dateISO}T00:00:00`;

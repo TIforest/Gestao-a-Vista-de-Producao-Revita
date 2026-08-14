@@ -1,5 +1,5 @@
 import type { Env } from "../types";
-import { dayBoundsLocal, monthBoundsLocal, nowBrazil, todayBrazilISODate, currentBrazilYearMonth } from "./date";
+import { dayBoundsLocal, nowBrazil, todayBrazilISODate, currentBrazilYearMonth } from "./date";
 import { getMetasDerivadas } from "./metas";
 
 export interface DashboardFilters {
@@ -51,15 +51,15 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
   const turma = filters.turma && turmasDisponiveis.includes(filters.turma) ? filters.turma : null;
   const maquina = filters.maquina && desaguadorasDisponiveis.includes(filters.maquina) ? filters.maquina : null;
 
-  const { start: monthStart, end: monthEnd } = monthBoundsLocal(yearMonth);
   const { start: dayStart, end: dayEnd } = dayBoundsLocal(dateISO);
 
   const metas = await getMetasDerivadas(env, dateISO, yearMonth);
 
-  const producaoMesRow = await env.DB.prepare(
-    "SELECT COALESCE(SUM(peso_seco), 0) AS total FROM apontamentos WHERE data_hora >= ? AND data_hora < ?"
-  )
-    .bind(monthStart, monthEnd)
+  // Vem do contador incremental (producao_mensal), não de SUM sobre
+  // apontamentos — a tabela de apontamentos só guarda uma janela recente
+  // (ver RETENTION_DAYS em graphSync.ts), não o mês inteiro linha a linha.
+  const producaoMesRow = await env.DB.prepare("SELECT total_peso AS total FROM producao_mensal WHERE ano_mes = ?")
+    .bind(yearMonth)
     .first<{ total: number }>();
 
   // "Produção Total do Dia": todas as turmas, respeita apenas o filtro de desaguadora.

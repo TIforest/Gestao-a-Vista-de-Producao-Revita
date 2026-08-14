@@ -1,6 +1,14 @@
 import type { Env } from "../types";
 import { encodeSharingUrl } from "./shareLink";
 import { parseWorkbook } from "./parseExcel";
+import { daysAgoLocalISOStart } from "./date";
+
+// O painel não guarda o histórico completo da planilha — só uma janela
+// recente (cobre o dia atual + margem de segurança pra virada de turno/dia).
+// A produção acumulada do mês fica num contador à parte (producao_mensal),
+// incrementado conforme cada linha nova aparece, sem precisar reprocessar
+// milhares de linhas antigas a cada sincronização.
+export const RETENTION_DAYS = 3;
 
 interface TokenResponse {
   access_token: string;
@@ -41,8 +49,9 @@ export interface SyncResult {
 
 /**
  * Busca o arquivo do SharePoint via Graph, compara `lastModifiedDateTime` com o
- * que está salvo em sync_state e, se mudou (ou `force`), baixa, faz parse e faz
- * upsert incremental em `apontamentos` (idempotente via row_hash).
+ * que está salvo em sync_state e, se mudou (ou `force`), baixa, faz parse
+ * (só a janela recente) e faz upsert em `apontamentos`, incrementando o
+ * acumulado mensal para as linhas que forem genuinamente novas.
  */
 export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise<SyncResult> {
   try {
@@ -78,8 +87,10 @@ export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise
     }
     const buffer = await contentRes.arrayBuffer();
 
-    const { rows, warnings } = await parseWorkbook(buffer, env.MS_SHEET_NAME);
+    const windowStart = daysAgoLocalISOStart(RETENTION_DAYS);
+    const { rows, warnings } = await parseWorkbook(buffer, env.MS_SHEET_NAME, windowStart);
     await upsertApontamentos(env, rows);
+    await pruneOldApontamentos(env, windowStart);
 
     await env.DB.prepare(
       `UPDATE sync_state SET sharepoint_last_modified = ?, last_sync_at = datetime('now'),
@@ -104,6 +115,36 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
   const CHUNK = 50;
   for (let i = 0; i < rows.length; i += CHUNK) {
     const chunk = rows.slice(i, i + CHUNK);
+
+    // Descobre quais hashes já existem, pra só somar no acumulado mensal
+    // as linhas genuinamente novas (evita contar de novo em cada sync).
+    const placeholders = chunk.map(() => "?").join(",");
+    const existing = await env.DB.prepare(`SELECT row_hash FROM apontamentos WHERE row_hash IN (${placeholders})`)
+      .bind(...chunk.map((r) => r.row_hash))
+      .all<{ row_hash: string }>();
+    const existingHashes = new Set(existing.results.map((r) => r.row_hash));
+    const novas = chunk.filter((r) => !existingHashes.has(r.row_hash));
+
+    if (novas.length > 0) {
+      const porMes = new Map<string, number>();
+      for (const row of novas) {
+        const anoMes = row.data_hora.slice(0, 7);
+        porMes.set(anoMes, (porMes.get(anoMes) ?? 0) + row.peso_seco);
+      }
+      for (const [anoMes, delta] of porMes) {
+        await env.DB.prepare(
+          `INSERT INTO producao_mensal (ano_mes, total_peso, linhas_contadas, updated_at)
+           VALUES (?, ?, ?, datetime('now'))
+           ON CONFLICT(ano_mes) DO UPDATE SET
+             total_peso = total_peso + excluded.total_peso,
+             linhas_contadas = linhas_contadas + excluded.linhas_contadas,
+             updated_at = excluded.updated_at`
+        )
+          .bind(anoMes, delta, novas.filter((r) => r.data_hora.slice(0, 7) === anoMes).length)
+          .run();
+      }
+    }
+
     const stmts = chunk.map((row) =>
       env.DB.prepare(
         `INSERT INTO apontamentos (row_hash, lote, cliente, numero_fardo, turma, peso_seco, data_hora, maquina, produto)
@@ -126,6 +167,10 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
     );
     if (stmts.length > 0) await env.DB.batch(stmts);
   }
+}
+
+async function pruneOldApontamentos(env: Env, windowStartISO: string): Promise<void> {
+  await env.DB.prepare("DELETE FROM apontamentos WHERE data_hora < ?").bind(windowStartISO).run();
 }
 
 export { upsertApontamentos };

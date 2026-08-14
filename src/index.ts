@@ -1,11 +1,11 @@
 import type { Env } from "./types";
 import { buildDashboardPayload } from "./lib/dashboard";
-import { runSync, upsertApontamentos } from "./lib/graphSync";
+import { runSync, upsertApontamentos, RETENTION_DAYS } from "./lib/graphSync";
 import { parseWorkbook } from "./lib/parseExcel";
 import { upsertMetaDia, upsertMetaMes } from "./lib/metas";
 import { buildExportWorkbook } from "./lib/exportXlsx";
 import { isAdminRequest } from "./lib/authAdmin";
-import { currentBrazilYearMonth, dayBoundsLocal, todayBrazilISODate } from "./lib/date";
+import { currentBrazilYearMonth, dayBoundsLocal, daysAgoLocalISOStart, todayBrazilISODate } from "./lib/date";
 
 function json(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
@@ -79,7 +79,8 @@ export default {
           return json({ erro: "Envie o arquivo no campo 'arquivo' (multipart/form-data)." }, { status: 400 });
         }
         const buffer = await file.arrayBuffer();
-        const { rows, warnings } = await parseWorkbook(buffer, env.MS_SHEET_NAME);
+        const windowStart = daysAgoLocalISOStart(RETENTION_DAYS);
+        const { rows, warnings } = await parseWorkbook(buffer, env.MS_SHEET_NAME, windowStart);
         await upsertApontamentos(env, rows);
         await env.DB.prepare(
           `UPDATE sync_state SET last_sync_at = datetime('now'), last_sync_status = 'sincronizado_manual',

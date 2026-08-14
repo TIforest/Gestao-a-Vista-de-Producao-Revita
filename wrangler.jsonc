@@ -43,5 +43,11 @@
     "HORAS_POR_TURNO_PADRAO": "6",
     "DESAGUADORAS": "01,02,03,04",
     "TURMAS": "A,B,C,D,E"
+  },
+
+  // Teto de CPU por execução. Só tem efeito de verdade no plano Paid (o
+  // Free é limitado pela plataforma independente deste valor) — ver SETUP.md.
+  "limits": {
+    "cpu_ms": 30000
   }
 }
