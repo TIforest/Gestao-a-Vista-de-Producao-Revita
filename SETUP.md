@@ -59,9 +59,12 @@ O Worker sobe com o painel estático e a API no mesmo domínio (`*.workers.dev` 
 ## 6. Testar localmente antes de mandar pra produção
 ```bash
 npx wrangler d1 execute revita-producao-db --local --file ./migrations/0001_init.sql
+npx wrangler d1 execute revita-producao-db --local --file ./scripts/seed_dev.sql   # dados fictícios, só local
 npx wrangler dev
 ```
 Crie um `.dev.vars` (não versionado) com `ADMIN_TOKEN` e valores fictícios de `MS_*` para testar a UI sem depender do Azure AD.
+
+**Importante:** `scripts/seed_dev.sql` fica fora da pasta `migrations/` de propósito — qualquer `.sql` dentro de `migrations/` é tratado como migração de schema e pode ser aplicado no banco remoto (de produção) pelo workflow "DB Migrate". Nunca coloque dados fictícios lá.
 
 ## 7. Deploy automático via GitHub Actions
 A cada `git push` na branch `main`, o workflow `.github/workflows/deploy.yml` publica o Worker sozinho (`cloudflare/wrangler-action`). Ele **não** roda migração de banco — mudanças em `migrations/` continuam aplicadas manualmente (passo 4), pra nunca alterar dados de produção sem você revisar antes.
