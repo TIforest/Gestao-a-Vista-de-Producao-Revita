@@ -118,7 +118,17 @@ export async function parseWorkbook(
       continue;
     }
 
-    const rowHash = await sha256Hex(`${loteVal}|${numeroFardo ?? ""}|${maquinaVal}|${dataHora}`);
+    // A chave usa só a DATA (não o horário completo): o horário do
+    // apontamento às vezes é corrigido depois na planilha, e usar o
+    // timestamp inteiro na chave faria essa correção virar uma linha
+    // "nova" (duplicando a produção no acumulado em vez de atualizar).
+    // TURMA entra na chave porque alguns lotes usam um rótulo genérico
+    // recorrente (ex.: "Prensado") sem número de fardo realmente único —
+    // ainda existe uma margem de erro rara (mesmo lote+fardo+turma+máquina
+    // duas vezes no mesmo dia), documentado no SETUP.md.
+    const rowHash = await sha256Hex(
+      `${loteVal}|${numeroFardo ?? ""}|${turmaVal}|${maquinaVal}|${dataHora.slice(0, 10)}`
+    );
 
     rows.push({
       lote: loteVal,
