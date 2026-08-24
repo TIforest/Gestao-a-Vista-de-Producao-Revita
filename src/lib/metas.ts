@@ -16,9 +16,13 @@ export interface MetasDerivadas {
   horasPorTurno: number;
 }
 
+// A meta "vale" a partir da data em que foi cadastrada até a próxima alteração
+// — não precisa ser recadastrada todo dia/mês. Por isso buscamos a referência
+// mais recente que seja <= a data pedida, em vez de exigir bater exatamente.
 export async function getMetaDia(env: Env, dateISO: string): Promise<MetaDia> {
   const row = await env.DB.prepare(
-    "SELECT referencia, valor, turnos_por_dia, horas_por_turno FROM metas WHERE escopo = 'dia' AND referencia = ?"
+    `SELECT referencia, valor, turnos_por_dia, horas_por_turno FROM metas
+     WHERE escopo = 'dia' AND referencia <= ? ORDER BY referencia DESC LIMIT 1`
   )
     .bind(dateISO)
     .first<MetaDia>();
@@ -32,7 +36,9 @@ export async function getMetaDia(env: Env, dateISO: string): Promise<MetaDia> {
 }
 
 export async function getMetaMes(env: Env, yearMonth: string): Promise<number> {
-  const row = await env.DB.prepare("SELECT valor FROM metas WHERE escopo = 'mes' AND referencia = ?")
+  const row = await env.DB.prepare(
+    "SELECT valor FROM metas WHERE escopo = 'mes' AND referencia <= ? ORDER BY referencia DESC LIMIT 1"
+  )
     .bind(yearMonth)
     .first<{ valor: number }>();
   return row?.valor ?? 0;
