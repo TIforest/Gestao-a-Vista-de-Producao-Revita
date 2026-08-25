@@ -18,7 +18,7 @@ interface TokenResponse {
 // O SharePoint volta e meia responde 503 "Something went wrong, tente
 // novamente" por instabilidade passageira do próprio serviço — sem isso, uma
 // única falha desse tipo já marcava a sincronização como "erro" na tela.
-async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+async function fetchWithRetry(url: string, init: RequestInit, attempts = 4): Promise<Response> {
   let lastRes: Response | null = null;
   let lastErr: unknown;
   for (let i = 0; i < attempts; i++) {
@@ -29,7 +29,7 @@ async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Pro
     } catch (err) {
       lastErr = err;
     }
-    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 800 * (i + 1)));
+    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 1000 * (i + 1)));
   }
   if (lastRes) return lastRes;
   throw lastErr;
