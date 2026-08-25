@@ -127,12 +127,16 @@
 
   function renderGauge(container, valor, meta, color) {
     container.innerHTML = "";
-    const size = 240; // grande de propósito — o painel fica numa TV vista de longe
+    // "size" é só a unidade interna do desenho (viewBox) — a altura em CSS
+    // fica em "auto", então o SVG estica pra preencher a largura real do
+    // painel (e o traço acompanha, escalado junto, pela unidade do viewBox).
+    const size = 240;
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
     svg.setAttribute("viewBox", `0 0 ${size} ${size / 2 + 10}`);
-    svg.setAttribute("width", "100%");
-    svg.setAttribute("height", (size / 2 + 10) + "px");
+    svg.style.width = "100%";
+    svg.style.height = "auto";
+    svg.style.display = "block";
 
     const cx = size / 2;
     const cy = size / 2;
