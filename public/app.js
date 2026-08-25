@@ -131,21 +131,27 @@
     // fica em "auto", então o SVG estica pra preencher a largura real do
     // painel (e o traço acompanha, escalado junto, pela unidade do viewBox).
     const size = 240;
+    const strokeWidth = 26;
+    // Espaço pra ponta arredondada do traço (stroke-linecap: round) não
+    // cortar na borda do SVG — a ponta se estende ~metade da espessura
+    // além do círculo do arco, em qualquer direção.
+    const pad = strokeWidth / 2 + 10;
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
-    svg.setAttribute("viewBox", `0 0 ${size} ${size / 2 + 10}`);
+
+    const cx = size / 2;
+    const r = cx - pad;
+    const cy = r + pad;
+    const viewBoxHeight = cy + pad;
+    svg.setAttribute("viewBox", `0 0 ${size} ${viewBoxHeight}`);
     svg.style.width = "100%";
     svg.style.height = "auto";
     svg.style.display = "block";
 
-    const cx = size / 2;
-    const cy = size / 2;
-    const r = size / 2 - 10;
-
     const bg = criarArcoMedidor(svgNS, cx, cy, r, 1); // trilho sempre completo, 0% a 100%
     for (const path of bg.children) {
       path.setAttribute("stroke", "#b19873"); // bege kraft — trilho do gauge sempre visível, mesmo com valor 0
-      path.setAttribute("stroke-width", "26");
+      path.setAttribute("stroke-width", String(strokeWidth));
     }
     svg.appendChild(bg);
 
@@ -153,7 +159,7 @@
     const fg = criarArcoMedidor(svgNS, cx, cy, r, pct);
     for (const path of fg.children) {
       path.setAttribute("stroke", color);
-      path.setAttribute("stroke-width", "26");
+      path.setAttribute("stroke-width", String(strokeWidth));
       path.setAttribute("stroke-linecap", "round");
     }
     svg.appendChild(fg);
