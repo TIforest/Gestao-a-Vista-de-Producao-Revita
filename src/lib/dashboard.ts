@@ -1,6 +1,29 @@
 import type { Env } from "../types";
 import { dayBoundsLocal, todayBrazilISODate } from "./date";
-import { META_TURNO, META_DIA, getMetaPorDesaguadora } from "./metasFixas";
+import { META_TURNO, META_DIA, META_HORA, getMetaPorDesaguadora } from "./metasFixas";
+
+/**
+ * Produção média por hora, replicando a fórmula DAX do BI original: acha a
+ * janela de turno fixa (00-06h / 06-12h / 12-18h / 18-24h) em que caiu o
+ * primeiro apontamento do recorte, e divide a produção do turno pelas horas
+ * decorridas desde o início dessa janela até o último apontamento.
+ */
+function producaoMediaHora(producaoTurno: number, primeiroISO: string | null, ultimoISO: string | null): number {
+  if (!primeiroISO || !ultimoISO) return 0;
+  const toMinutosDoDia = (iso: string): number => {
+    const [h, m, s] = iso.slice(11, 19).split(":").map(Number);
+    return (h ?? 0) * 60 + (m ?? 0) + (s ?? 0) / 60;
+  };
+  const minPrimeiro = toMinutosDoDia(primeiroISO);
+  const minUltimo = toMinutosDoDia(ultimoISO);
+  let inicioTurnoMin: number;
+  if (minPrimeiro < 6 * 60) inicioTurnoMin = 0;
+  else if (minPrimeiro < 12 * 60) inicioTurnoMin = 6 * 60;
+  else if (minPrimeiro < 18 * 60) inicioTurnoMin = 12 * 60;
+  else inicioTurnoMin = 18 * 60;
+  const horasTrabalhadas = (minUltimo - inicioTurnoMin) / 60;
+  return horasTrabalhadas > 0 ? producaoTurno / horasTrabalhadas : 0;
+}
 
 export interface DashboardFilters {
   turma?: string;
@@ -18,6 +41,8 @@ export interface DashboardPayload {
   metaDia: number;
   producaoTurno: number;
   metaTurno: number;
+  producaoMediaHora: number;
+  metaHora: number;
   percentualMetaAtingida: number; // 0..100 (produção turno / meta turno)
   producaoPorTurma: { turma: string; valor: number; meta: number }[];
   producaoPorDesaguadora: { maquina: string; valor: number; meta: number }[];
@@ -83,6 +108,12 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
     .bind(...turnoArgs)
     .first<{ total: number }>();
 
+  const janelaHoraRow = await env.DB.prepare(
+    `SELECT MIN(data_hora) AS primeiro, MAX(data_hora) AS ultimo FROM apontamentos WHERE ${turnoConds.join(" AND ")}`
+  )
+    .bind(...turnoArgs)
+    .first<{ primeiro: string | null; ultimo: string | null }>();
+
   const producaoPorTurmaRows = await env.DB.prepare(
     `SELECT turma, COALESCE(SUM(peso_seco), 0) AS total FROM apontamentos
      WHERE ${diaConds.join(" AND ")} GROUP BY turma`
@@ -140,6 +171,8 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
     metaDia: META_DIA,
     producaoTurno,
     metaTurno: metaTurnoAlvo,
+    producaoMediaHora: producaoMediaHora(producaoTurno, janelaHoraRow?.primeiro ?? null, janelaHoraRow?.ultimo ?? null),
+    metaHora: META_HORA,
     // Sem limite em 100 — se passar da meta, mostra o valor real (ex: 105%).
     percentualMetaAtingida: metaTurnoAlvo > 0 ? (producaoTurno / metaTurnoAlvo) * 100 : 0,
     // Cada turma tem sua própria produção do turno, sempre comparada com a

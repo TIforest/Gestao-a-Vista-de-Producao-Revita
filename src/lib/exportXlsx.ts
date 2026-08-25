@@ -15,6 +15,8 @@ export function buildExportWorkbook(payload: DashboardPayload, rows: Record<stri
     ["Meta do dia", payload.metaDia],
     ["Produção total do turno/turma", payload.producaoTurno],
     ["Meta do turno", payload.metaTurno],
+    ["Produção média por hora", payload.producaoMediaHora],
+    ["Meta por hora", payload.metaHora],
     ["% da meta atingida", `${payload.percentualMetaAtingida.toFixed(1)}%`],
   ];
   const resumoSheet = XLSX.utils.aoa_to_sheet(resumo);

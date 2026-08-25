@@ -55,7 +55,6 @@
 
     const badge = document.createElement("div");
     badge.className = "hbar-value-badge";
-    badge.style.left = `calc(${pct}% + 6px)`;
     badge.textContent = fmtMil(valor);
     track.appendChild(badge);
 
@@ -67,6 +66,24 @@
     row.appendChild(metaLabel);
 
     if (onClick) row.addEventListener("click", onClick);
+
+    // Posiciona o rótulo do valor depois de estar no DOM: fora da barra
+    // (após o preenchimento) se couber sem invadir a meta ao lado; senão,
+    // para dentro da barra, encostado à direita do preenchimento.
+    requestAnimationFrame(() => {
+      const trackWidth = track.clientWidth;
+      if (!trackWidth) return;
+      const fillWidthPx = (pct / 100) * trackWidth;
+      const badgeWidth = badge.offsetWidth;
+      const GAP = 6;
+      if (fillWidthPx + GAP + badgeWidth <= trackWidth) {
+        badge.style.left = fillWidthPx + GAP + "px";
+      } else {
+        badge.style.left = Math.max(GAP, fillWidthPx - GAP - badgeWidth) + "px";
+      }
+      badge.style.visibility = "visible";
+    });
+
     return row;
   }
 
@@ -228,6 +245,12 @@
         })
       );
     }
+
+    const horaChart = document.getElementById("horaChart");
+    horaChart.innerHTML = "";
+    horaChart.appendChild(
+      renderHBarRow({ label: state.turma || "TODAS", valor: payload.producaoMediaHora, meta: payload.metaHora })
+    );
 
     renderGauge(document.getElementById("gaugeTurno"), payload.producaoTurno, payload.metaTurno, "#c5f249");
     renderGauge(document.getElementById("gaugeDia"), payload.producaoDia, payload.metaDia, "#c1b4ee");
