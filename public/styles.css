@@ -63,7 +63,6 @@ body {
   font-size: 0.85rem;
   cursor: pointer;
 }
-.btn-primary { background: var(--color-dado); color: var(--color-base-escura); font-weight: 700; }
 .btn-ghost { background: transparent; color: var(--forest-white); border: 1px solid #33474c; }
 .btn-ghost:hover { border-color: var(--color-dado); }
 
@@ -201,13 +200,6 @@ tbody tr:nth-child(even) { background: #faf9f5; }
 .dot-green { background: var(--color-dado); }
 .dot-blue { background: var(--color-meta); }
 .dot-red { background: var(--color-neutro); }
-
-/* --- dialog do gestor --- */
-.dialog { border: none; border-radius: var(--radius); padding: 20px; width: min(420px, 90vw); }
-.dialog fieldset { border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 12px; }
-.dialog label { display: block; font-size: 0.82rem; margin: 8px 0; }
-.dialog input { width: 100%; padding: 6px 8px; margin-top: 4px; border: 1px solid var(--border-color); border-radius: 6px; }
-.hint { font-size: 0.75rem; color: var(--text-muted); }
 
 @media (max-width: 900px) {
   .grid {

@@ -4,7 +4,6 @@
   const state = {
     turma: null,
     maquina: null,
-    adminToken: localStorage.getItem("revita_admin_token") || "",
   };
 
   const REFRESH_MS = 30_000; // o servidor checa o SharePoint a cada 1 min; o painel rebusca o dashboard a cada 30s.
@@ -34,17 +33,6 @@
     const res = await fetch(path);
     if (!res.ok) throw new Error(`Erro ${res.status} ao consultar ${path}`);
     return res.json();
-  }
-
-  async function apiPostAuth(path, body) {
-    const res = await fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${state.adminToken}` },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.erro || `Erro ${res.status}`);
-    return data;
   }
 
   function renderHBarRow({ label, valor, meta, onClick, selected }) {
@@ -272,92 +260,7 @@
     }
   }
 
-  // --- ações da topbar ---
-  document.getElementById("btnRefresh").addEventListener("click", async () => {
-    if (state.adminToken) {
-      try {
-        await apiPostAuth("/api/sync", {});
-      } catch (err) {
-        console.warn("Sync forçado indisponível (sem token ou erro):", err.message);
-      }
-    }
-    load();
-  });
-
-  document.getElementById("btnExport").addEventListener("click", () => {
-    const params = new URLSearchParams();
-    if (state.turma) params.set("turma", state.turma);
-    if (state.maquina) params.set("maquina", state.maquina);
-    window.location.href = "/api/export?" + params.toString();
-  });
-
-  // --- dialog do gestor ---
-  const dialog = document.getElementById("gestorDialog");
-  document.getElementById("btnGestor").addEventListener("click", () => {
-    document.getElementById("loginBlock").hidden = !!state.adminToken;
-    document.getElementById("metasBlock").hidden = !state.adminToken;
-    dialog.showModal();
-  });
-  document.getElementById("btnFecharGestor").addEventListener("click", () => dialog.close());
-
-  document.getElementById("btnLogin").addEventListener("click", () => {
-    const token = document.getElementById("adminToken").value.trim();
-    if (!token) return;
-    state.adminToken = token;
-    localStorage.setItem("revita_admin_token", token);
-    document.getElementById("loginBlock").hidden = true;
-    document.getElementById("metasBlock").hidden = false;
-  });
-
-  document.getElementById("btnSalvarMetaDia").addEventListener("click", async () => {
-    const valor = Number(document.getElementById("metaDiaValor").value);
-    const turnosPorDia = Number(document.getElementById("turnosPorDia").value);
-    const horasPorTurno = Number(document.getElementById("horasPorTurno").value);
-    const msg = document.getElementById("gestorMsg");
-    try {
-      await apiPostAuth("/api/metas", { escopo: "dia", valor, turnosPorDia, horasPorTurno });
-      msg.textContent = "Meta do dia salva.";
-      load();
-    } catch (err) {
-      msg.textContent = "Erro: " + err.message;
-    }
-  });
-
-  document.getElementById("btnSalvarMetaMes").addEventListener("click", async () => {
-    const valor = Number(document.getElementById("metaMesValor").value);
-    const msg = document.getElementById("gestorMsg");
-    try {
-      await apiPostAuth("/api/metas", { escopo: "mes", valor });
-      msg.textContent = "Meta do mês salva.";
-      load();
-    } catch (err) {
-      msg.textContent = "Erro: " + err.message;
-    }
-  });
-
-  document.getElementById("btnUpload").addEventListener("click", async () => {
-    const input = document.getElementById("uploadArquivo");
-    const msg = document.getElementById("gestorMsg");
-    if (!input.files?.[0]) {
-      msg.textContent = "Selecione um arquivo .xlsx.";
-      return;
-    }
-    const form = new FormData();
-    form.append("arquivo", input.files[0]);
-    try {
-      const res = await fetch("/api/upload", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${state.adminToken}` },
-        body: form,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.erro || "Falha no upload");
-      msg.textContent = `Planilha processada: ${data.linhas} linhas.` + (data.warnings?.length ? ` Avisos: ${data.warnings.length}` : "");
-      load();
-    } catch (err) {
-      msg.textContent = "Erro: " + err.message;
-    }
-  });
+  document.getElementById("btnRefresh").addEventListener("click", load);
 
   load();
   setInterval(load, REFRESH_MS);

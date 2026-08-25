@@ -16,8 +16,6 @@
     <div class="topbar-actions">
       <span id="syncInfo" class="sync-info">—</span>
       <button id="btnRefresh" class="btn btn-ghost" title="Atualizar dados agora">↻ Atualizar</button>
-      <button id="btnExport" class="btn btn-ghost" title="Exportar para Excel">⬇ Exportar Excel</button>
-      <button id="btnGestor" class="btn btn-primary" title="Área do gestor">⚙ Gestor</button>
     </div>
   </header>
 
@@ -100,54 +98,6 @@
       </div>
     </section>
   </main>
-
-  <dialog id="gestorDialog" class="dialog">
-    <form method="dialog" id="gestorForm">
-      <h2>Área do Gestor</h2>
-
-      <div id="loginBlock">
-        <label>Token de acesso do gestor
-          <input type="password" id="adminToken" autocomplete="off" />
-        </label>
-        <button type="button" id="btnLogin" class="btn btn-primary">Entrar</button>
-        <p class="hint">Token configurado pelo administrador do painel (ADMIN_TOKEN).</p>
-      </div>
-
-      <div id="metasBlock" hidden>
-        <fieldset>
-          <legend>Meta do dia</legend>
-          <label>Meta do dia (kg)
-            <input type="number" id="metaDiaValor" min="0" step="0.01" />
-          </label>
-          <label>Turnos por dia
-            <input type="number" id="turnosPorDia" min="1" step="1" value="4" />
-          </label>
-          <label>Horas por turno
-            <input type="number" id="horasPorTurno" min="1" step="0.5" value="6" />
-          </label>
-          <button type="button" id="btnSalvarMetaDia" class="btn btn-primary">Salvar meta do dia</button>
-        </fieldset>
-
-        <fieldset>
-          <legend>Meta do mês</legend>
-          <label>Meta do mês (kg)
-            <input type="number" id="metaMesValor" min="0" step="0.01" />
-          </label>
-          <button type="button" id="btnSalvarMetaMes" class="btn btn-primary">Salvar meta do mês</button>
-        </fieldset>
-
-        <fieldset>
-          <legend>Upload manual da planilha</legend>
-          <input type="file" id="uploadArquivo" accept=".xlsx,.xls" />
-          <button type="button" id="btnUpload" class="btn btn-primary">Enviar e sincronizar</button>
-        </fieldset>
-
-        <p id="gestorMsg" class="hint"></p>
-      </div>
-
-      <button type="button" id="btnFecharGestor" class="btn btn-ghost">Fechar</button>
-    </form>
-  </dialog>
 
   <script src="/app.js"></script>
 </body>
