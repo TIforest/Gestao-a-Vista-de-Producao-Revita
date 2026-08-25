@@ -15,6 +15,26 @@ interface TokenResponse {
   expires_in: number;
 }
 
+// O SharePoint volta e meia responde 503 "Something went wrong, tente
+// novamente" por instabilidade passageira do próprio serviço — sem isso, uma
+// única falha desse tipo já marcava a sincronização como "erro" na tela.
+async function fetchWithRetry(url: string, init: RequestInit, attempts = 3): Promise<Response> {
+  let lastRes: Response | null = null;
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.ok || res.status < 500) return res;
+      lastRes = res;
+    } catch (err) {
+      lastErr = err;
+    }
+    if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 800 * (i + 1)));
+  }
+  if (lastRes) return lastRes;
+  throw lastErr;
+}
+
 async function getGraphToken(env: Env): Promise<string> {
   const res = await fetch(`https://login.microsoftonline.com/${env.MS_TENANT_ID}/oauth2/v2.0/token`, {
     method: "POST",
@@ -58,7 +78,7 @@ export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise
     const token = await getGraphToken(env);
     const shareId = encodeSharingUrl(env.MS_SHARE_URL);
 
-    const metaRes = await fetch(
+    const metaRes = await fetchWithRetry(
       `https://graph.microsoft.com/v1.0/shares/${shareId}/driveItem?$select=id,lastModifiedDateTime,parentReference`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
@@ -78,7 +98,7 @@ export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise
       return { status: "sem_alteracao", rows: 0, warnings: [], sharepointLastModified: meta.lastModifiedDateTime };
     }
 
-    const contentRes = await fetch(
+    const contentRes = await fetchWithRetry(
       `https://graph.microsoft.com/v1.0/drives/${meta.parentReference.driveId}/items/${meta.id}/content`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
