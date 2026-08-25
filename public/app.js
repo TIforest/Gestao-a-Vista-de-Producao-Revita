@@ -97,7 +97,7 @@
 
     const bg = document.createElementNS(svgNS, "path");
     bg.setAttribute("d", describeArc(cx, cy, r, 180, 360));
-    bg.setAttribute("stroke", "#eef0eb");
+    bg.setAttribute("stroke", "#b19873"); // bege kraft — trilho do gauge sempre visível, mesmo com valor 0
     bg.setAttribute("stroke-width", "16");
     bg.setAttribute("fill", "none");
     svg.appendChild(bg);
