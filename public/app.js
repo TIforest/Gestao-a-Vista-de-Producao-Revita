@@ -70,6 +70,44 @@
     return row;
   }
 
+  // Ponto na borda do semicírculo (topo do medidor). theta: 180° = esquerda
+  // (0%), 90° = topo (50%), 0° = direita (100%).
+  function pontoGauge(cx, cy, r, thetaDeg) {
+    const rad = (thetaDeg * Math.PI) / 180;
+    return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
+  }
+
+  // Um arco de no máximo 90° entre dois ângulos (thetaFrom > thetaTo).
+  // Nunca desenha um arco de exatamente 180° — esse caso é numericamente
+  // instável em SVG (os dois pontos ficam diametralmente opostos e o
+  // renderizador pode "confundir" de que lado desenhar o traço).
+  function arcoSVG(cx, cy, r, thetaFrom, thetaTo) {
+    const p1 = pontoGauge(cx, cy, r, thetaFrom);
+    const p2 = pontoGauge(cx, cy, r, thetaTo);
+    return `M ${p1.x} ${p1.y} A ${r} ${r} 0 0 1 ${p2.x} ${p2.y}`;
+  }
+
+  // Desenha o trecho do medidor entre 0% e `pct` (0..1) como 1 ou 2 arcos de
+  // até 90° cada, sempre que o trecho cruzar o topo (50%).
+  function criarArcoMedidor(svgNS, cx, cy, r, pct) {
+    const grupo = document.createElementNS(svgNS, "g");
+    const thetaFim = 180 - Math.min(1, Math.max(0, pct)) * 180;
+    if (thetaFim < 90) {
+      grupo.appendChild(criarPath(svgNS, arcoSVG(cx, cy, r, 180, 90)));
+      grupo.appendChild(criarPath(svgNS, arcoSVG(cx, cy, r, 90, thetaFim)));
+    } else {
+      grupo.appendChild(criarPath(svgNS, arcoSVG(cx, cy, r, 180, thetaFim)));
+    }
+    return grupo;
+  }
+
+  function criarPath(svgNS, d) {
+    const path = document.createElementNS(svgNS, "path");
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+    return path;
+  }
+
   function renderGauge(container, valor, meta, color) {
     container.innerHTML = "";
     const size = 160;
@@ -83,21 +121,20 @@
     const cy = size / 2;
     const r = size / 2 - 10;
 
-    const bg = document.createElementNS(svgNS, "path");
-    bg.setAttribute("d", describeArc(cx, cy, r, 180, 360));
-    bg.setAttribute("stroke", "#b19873"); // bege kraft — trilho do gauge sempre visível, mesmo com valor 0
-    bg.setAttribute("stroke-width", "16");
-    bg.setAttribute("fill", "none");
+    const bg = criarArcoMedidor(svgNS, cx, cy, r, 1); // trilho sempre completo, 0% a 100%
+    for (const path of bg.children) {
+      path.setAttribute("stroke", "#b19873"); // bege kraft — trilho do gauge sempre visível, mesmo com valor 0
+      path.setAttribute("stroke-width", "16");
+    }
     svg.appendChild(bg);
 
     const pct = meta > 0 ? Math.min(1, valor / meta) : 0;
-    const endAngle = 180 + pct * 180;
-    const fg = document.createElementNS(svgNS, "path");
-    fg.setAttribute("d", describeArc(cx, cy, r, 180, endAngle));
-    fg.setAttribute("stroke", color);
-    fg.setAttribute("stroke-width", "16");
-    fg.setAttribute("stroke-linecap", "round");
-    fg.setAttribute("fill", "none");
+    const fg = criarArcoMedidor(svgNS, cx, cy, r, pct);
+    for (const path of fg.children) {
+      path.setAttribute("stroke", color);
+      path.setAttribute("stroke-width", "16");
+      path.setAttribute("stroke-linecap", "round");
+    }
     svg.appendChild(fg);
 
     container.appendChild(svg);
@@ -113,18 +150,6 @@
     bounds.className = "gauge-bounds";
     bounds.innerHTML = `<span>0,000 Ton</span><span>${fmtTon(meta)}</span>`;
     container.appendChild(bounds);
-  }
-
-  function polarToCartesian(cx, cy, r, angleDeg) {
-    const a = ((angleDeg - 90) * Math.PI) / 180;
-    return { x: cx + r * Math.cos(a), y: cy + r * Math.sin(a) };
-  }
-
-  function describeArc(cx, cy, r, startAngle, endAngle) {
-    const start = polarToCartesian(cx, cy, r, endAngle);
-    const end = polarToCartesian(cx, cy, r, startAngle);
-    const largeArc = endAngle - startAngle <= 180 ? "0" : "1";
-    return `M ${start.x} ${start.y} A ${r} ${r} 0 ${largeArc} 0 ${end.x} ${end.y}`;
   }
 
   function renderMetaBar(container, pct) {
