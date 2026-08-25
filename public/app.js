@@ -8,10 +8,10 @@
 
   const REFRESH_MS = 30_000; // o servidor checa o SharePoint a cada 1 min; o painel rebusca o dashboard a cada 30s.
 
-  function fmtMil(valor) {
-    const mil = (valor || 0) / 1000;
+  function fmtTon(valor) {
+    const ton = (valor || 0) / 1000; // peso_seco vem em kg — dividir por 1000 já dá toneladas
     return (
-      mil.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + " Mil"
+      ton.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + " Ton"
     );
   }
 
@@ -56,14 +56,14 @@
     const badge = document.createElement("div");
     badge.className = "hbar-value-badge";
     badge.style.left = `calc(${pct}% + 6px)`;
-    badge.textContent = fmtMil(valor);
+    badge.textContent = fmtTon(valor);
     track.appendChild(badge);
 
     row.appendChild(track);
 
     const metaLabel = document.createElement("div");
     metaLabel.className = "hbar-meta-label";
-    metaLabel.textContent = fmtMil(meta);
+    metaLabel.textContent = fmtTon(meta);
     row.appendChild(metaLabel);
 
     if (onClick) row.addEventListener("click", onClick);
@@ -106,12 +106,12 @@
     // contraste como texto sobre fundo branco, então servem só para o arco.
     const value = document.createElement("div");
     value.className = "gauge-value";
-    value.textContent = fmtMil(valor);
+    value.textContent = fmtTon(valor);
     container.appendChild(value);
 
     const bounds = document.createElement("div");
     bounds.className = "gauge-bounds";
-    bounds.innerHTML = `<span>0,000 Mil</span><span>${fmtMil(meta)}</span>`;
+    bounds.innerHTML = `<span>0,000 Ton</span><span>${fmtTon(meta)}</span>`;
     container.appendChild(bounds);
   }
 
@@ -175,7 +175,7 @@
   function render(payload) {
     renderTurmas(payload);
 
-    document.getElementById("producaoMesValor").textContent = fmtMil(payload.producaoMes);
+    document.getElementById("producaoMesValor").textContent = fmtTon(payload.producaoMes);
     const [y, m] = payload.data.split("-");
     document.getElementById("mesLabel").textContent = `${MONTH_NAMES[Number(m) - 1]} ${y}`;
 
