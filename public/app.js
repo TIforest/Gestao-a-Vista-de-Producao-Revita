@@ -145,7 +145,7 @@
     const bg = criarArcoMedidor(svgNS, cx, cy, r, 1); // trilho sempre completo, 0% a 100%
     for (const path of bg.children) {
       path.setAttribute("stroke", "#b19873"); // bege kraft — trilho do gauge sempre visível, mesmo com valor 0
-      path.setAttribute("stroke-width", "22");
+      path.setAttribute("stroke-width", "26");
     }
     svg.appendChild(bg);
 
@@ -153,7 +153,7 @@
     const fg = criarArcoMedidor(svgNS, cx, cy, r, pct);
     for (const path of fg.children) {
       path.setAttribute("stroke", color);
-      path.setAttribute("stroke-width", "22");
+      path.setAttribute("stroke-width", "26");
       path.setAttribute("stroke-linecap", "round");
     }
     svg.appendChild(fg);
