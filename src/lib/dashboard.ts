@@ -1,6 +1,6 @@
 import type { Env } from "../types";
-import { dayBoundsLocal, nowBrazil, todayBrazilISODate, currentBrazilYearMonth } from "./date";
-import { getMetasDerivadas } from "./metas";
+import { dayBoundsLocal, todayBrazilISODate } from "./date";
+import { META_TURNO, META_DIA, getMetaPorDesaguadora } from "./metasFixas";
 
 export interface DashboardFilters {
   turma?: string;
@@ -14,16 +14,13 @@ export interface DashboardPayload {
   turmasDisponiveis: string[];
   desaguadorasDisponiveis: string[];
   producaoMes: number;
-  metaMes: number;
   producaoDia: number;
   metaDia: number;
   producaoTurno: number;
   metaTurno: number;
-  producaoMediaHora: number;
-  metaHora: number;
   percentualMetaAtingida: number; // 0..100 (produção turno / meta turno)
-  producaoPorTurma: { turma: string; valor: number }[];
-  producaoPorDesaguadora: { maquina: string; valor: number }[];
+  producaoPorTurma: { turma: string; valor: number; meta: number }[];
+  producaoPorDesaguadora: { maquina: string; valor: number; meta: number }[];
   ultimosApontamentos: {
     lote: string;
     cliente: string;
@@ -52,8 +49,6 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
   const maquina = filters.maquina && desaguadorasDisponiveis.includes(filters.maquina) ? filters.maquina : null;
 
   const { start: dayStart, end: dayEnd } = dayBoundsLocal(dateISO);
-
-  const metas = await getMetasDerivadas(env, dateISO, yearMonth);
 
   // Vem do contador incremental (producao_mensal), não de SUM sobre
   // apontamentos — a tabela de apontamentos só guarda uma janela recente
@@ -130,14 +125,10 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
     "SELECT last_sync_at, last_sync_status, last_sync_rows, last_error FROM sync_state WHERE id = 1"
   ).first<{ last_sync_at: string | null; last_sync_status: string; last_sync_rows: number; last_error: string | null }>();
 
-  const metaTurnoAlvo = turma ? metas.metaTurno : metas.metaDia;
+  // Sem turma selecionada ("Todas"), o recorte "turno" vira o total do dia
+  // inteiro — então compara com a meta do dia, não a de um turno só.
+  const metaTurnoAlvo = turma ? META_TURNO : META_DIA;
   const producaoTurno = producaoTurnoRow?.total ?? 0;
-
-  const horaAtual = nowBrazil().getUTCHours() + nowBrazil().getUTCMinutes() / 60;
-  const tetoHoras = turma ? metas.horasPorTurno : 24;
-  const horasDecorridas = Math.min(Math.max(horaAtual, 1), tetoHoras);
-  const producaoMediaHora = producaoTurno / horasDecorridas;
-  const metaHoraAlvo = turma ? metas.metaHora : metas.metaDia / 24;
 
   return {
     data: dateISO,
@@ -145,21 +136,23 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
     turmasDisponiveis,
     desaguadorasDisponiveis,
     producaoMes: producaoMesRow?.total ?? 0,
-    metaMes: metas.metaMes,
     producaoDia: producaoDiaRow?.total ?? 0,
-    metaDia: metas.metaDia,
+    metaDia: META_DIA,
     producaoTurno,
     metaTurno: metaTurnoAlvo,
-    producaoMediaHora,
-    metaHora: metaHoraAlvo,
     percentualMetaAtingida: metaTurnoAlvo > 0 ? Math.min(100, (producaoTurno / metaTurnoAlvo) * 100) : 0,
+    // Cada turma tem sua própria produção do turno, sempre comparada com a
+    // meta fixa do turno (40.000) — não muda com o filtro "Todas"/turma
+    // selecionada, que só afeta a meta do gauge acima.
     producaoPorTurma: turmasDisponiveis.map((t) => ({
       turma: t,
       valor: producaoPorTurmaRows.results.find((r) => r.turma === t)?.total ?? 0,
+      meta: META_TURNO,
     })),
     producaoPorDesaguadora: desaguadorasDisponiveis.map((m) => ({
       maquina: m,
       valor: producaoPorDesaguadoraRows.results.find((r) => r.maquina === m)?.total ?? 0,
+      meta: getMetaPorDesaguadora(m),
     })),
     ultimosApontamentos: ultimosRows.results as DashboardPayload["ultimosApontamentos"],
     sync: {

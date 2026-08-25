@@ -2,12 +2,12 @@
 
 ## 1. O que já está pronto
 - Worker (Cloudflare) em `src/`, painel estático em `public/`.
-- Banco D1 com 3 tabelas: `apontamentos`, `metas`, `sync_state` (`migrations/0001_init.sql`).
+- Banco D1: `apontamentos` (janela recente, ver `RETENTION_DAYS`), `producao_mensal` (acumulado incremental), `sync_state`. A tabela `metas` existe no schema mas não é mais usada — metas viraram valores fixos em `src/lib/metasFixas.ts`.
 - Sincronização automática com o Excel do SharePoint via Microsoft Graph, checando a cada 1 minuto (cron trigger) se o arquivo mudou, com botão de "Atualizar" manual e upload manual como caminho alternativo. O painel recarrega os dados do navegador a cada 30 segundos — na prática, uma alteração salva na planilha aparece no painel em até ~1-2 minutos.
 - Testado localmente com `wrangler dev`: API, filtros por turma/desaguadora, metas, upload e exportação para Excel — todos validados com dados de exemplo.
 
 ## 2. Pendências que só você resolve
-1. **Registro do app no Azure AD** (necessário para a sincronização automática — veja passo a passo abaixo). Sem isso, o painel funciona só com upload manual do Excel pelo gestor.
+1. ~~Registro do app no Azure AD~~ — feito, sincronização automática ativa.
 2. **Confirmar nomes de coluna reais da planilha** — o parser (`src/lib/parseExcel.ts`) já reconhece "Lote", "Cliente", "Número do Fardo", "TURMA", "Soma de Peso Seco 51%", "Data", "Hora do Apontamento", "Máquina"/"Desaguadora", "Produto" (com variações). Se algum nome real for diferente, é só me avisar ou ajustar a lista `HEADER_ALIASES`.
 3. **Plano do Cloudflare Workers — recomendo o plano Paid (US$ 5/mês).** Cron Trigger no plano Free tem só 10ms de CPU por execução; a checagem "o arquivo mudou?" é barata e cabe tranquilamente nisso, mas o processamento completo (baixar + interpretar a planilha + gravar no banco), que só roda quando o Excel realmente mudou, pode passar de 10ms se a planilha crescer — no plano Paid o limite sobe pra 30 segundos, então isso deixa de ser risco. Sem o upgrade, o pior cenário é a sincronização de um ciclo específico falhar e tentar de novo no minuto seguinte (não trava o painel, só atrasa a atualização).
 4. **Deploy automático via GitHub Actions** — configurado (veja seção 7), mas exige que você cadastre um token da Cloudflare como secret no repositório do GitHub antes do primeiro push.
@@ -47,7 +47,7 @@ npx wrangler secret put MS_TENANT_ID
 npx wrangler secret put MS_CLIENT_ID
 npx wrangler secret put MS_CLIENT_SECRET
 npx wrangler secret put MS_SHARE_URL   # cole o link do SharePoint (o mesmo compartilhado nesta conversa)
-npx wrangler secret put ADMIN_TOKEN    # senha que o gestor vai usar para editar metas / upload / forçar sync
+npx wrangler secret put ADMIN_TOKEN    # protege /api/upload e /api/sync (upload manual e forçar sincronização)
 ```
 
 ## 5. Deploy
@@ -78,7 +78,6 @@ Os outros segredos (`MS_TENANT_ID`, `MS_CLIENT_ID`, `MS_CLIENT_SECRET`, `MS_SHAR
 
 ## 8. Decisões de design (para validar com você)
 - **"Turno" = a turma selecionada.** A planilha não tem uma coluna separada de "turno" (janela de horário); o que existe é a coluna TURMA. Então "Produção Total do Turno" = produção da turma selecionada no dia; "Produção Total do Dia" = todas as turmas somadas. Se isso não bater com a operação real, me diga como o turno deveria ser calculado.
-- **Meta do turno = Meta do dia ÷ turnos por dia** (padrão 4) e **meta por hora = meta do turno ÷ horas por turno** (padrão 6), exatamente como pedido ("metas de hora/dia/turno baseadas na meta do dia"). Esses dois divisores (turnos por dia, horas por turno) ficam editáveis junto com a meta do dia na área do gestor.
-- **Meta por desaguadora = meta do turno ÷ número de desaguadoras ativas** (divisão igual entre as 4).
-- **Sincronização:** o cron roda a cada 1 minuto e só baixa/reprocessa a planilha se o `lastModifiedDateTime` do arquivo mudou (evita trabalho à toa — a maioria das execuções só faz essa checagem barata). O botão "Atualizar" força a sincronização na hora. O painel também recarrega os dados do banco a cada 30 segundos sozinho, então qualquer atualização (planilha, upload manual, edição de meta) aparece no telão em no máximo ~1-2 minutos.
+- **Metas são fixas, definidas em `src/lib/metasFixas.ts`** (2026-08-25): não existe mais edição de meta pelo gestor no painel — é um número visual/informativo só, quem decide os valores é a operação. Meta por desaguadora = 10.000 cada (fixo, não é fração da meta do turno). Meta do turno = 40.000 (fixo, não é fração da meta do dia). Meta do dia = 120.000 (fixo, não é meta do turno × turnos por dia). Não existe meta por hora nem meta do mês. Se algum desses números mudar de verdade (ex: capacidade de uma desaguadora aumentar), é só atualizar `metasFixas.ts` e dar `git push` — o deploy é automático.
+- **Sincronização:** o cron roda a cada 1 minuto e só baixa/reprocessa a planilha se o `lastModifiedDateTime` do arquivo mudou (evita trabalho à toa — a maioria das execuções só faz essa checagem barata). O botão "Atualizar" força a sincronização na hora. O painel também recarrega os dados do banco a cada 30 segundos sozinho, então qualquer atualização na planilha aparece no telão em no máximo ~1-2 minutos.
 - **Deduplicação:** cada linha da planilha vira uma "impressão digital" (hash de lote + fardo + máquina + data/hora). Isso deixa a sincronização segura para rodar repetidamente sem duplicar dados, mesmo que o Excel seja reexportado do zero.

@@ -36,11 +36,6 @@
   },
 
   "vars": {
-    // Quantidade de turnos (janelas de horário) por dia e horas por turno.
-    // Usados para derivar meta/turno e meta/hora a partir da meta do dia.
-    // Podem ser sobrescritos pelo gestor via /api/metas (config fica no D1).
-    "TURNOS_POR_DIA_PADRAO": "4",
-    "HORAS_POR_TURNO_PADRAO": "6",
     "DESAGUADORAS": "01,02,03,04",
     "TURMAS": "A,B,C,D,E"
   }

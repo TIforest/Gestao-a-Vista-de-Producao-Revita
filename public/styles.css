@@ -71,7 +71,7 @@ body {
   grid-template-columns: 150px 1.1fr 1fr 1.3fr;
   grid-template-areas:
     "turmas producaoTurma mes desaguadoras"
-    "turmas producaoTurma hora desaguadoras"
+    "turmas producaoTurma mes desaguadoras"
     "turmas turno dia metaAtingida"
     "tabela tabela tabela tabela";
   gap: 12px;
@@ -121,7 +121,6 @@ body {
 .producao-turma-panel { grid-area: producaoTurma; }
 .mes-panel { grid-area: mes; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
 .desaguadoras-panel { grid-area: desaguadoras; }
-.hora-panel { grid-area: hora; }
 .turno-panel { grid-area: turno; }
 .dia-panel { grid-area: dia; }
 .meta-atingida-panel { grid-area: metaAtingida; }
@@ -208,7 +207,6 @@ tbody tr:nth-child(even) { background: #faf9f5; }
       "turmas"
       "mes"
       "producaoTurma"
-      "hora"
       "desaguadoras"
       "turno"
       "dia"

@@ -185,33 +185,23 @@
       : payload.producaoPorTurma;
     for (const r of linhasTurma) {
       turmaChart.appendChild(
-        renderHBarRow({ label: r.turma, valor: r.valor, meta: payload.metaTurno || payload.metaDia })
+        renderHBarRow({ label: r.turma, valor: r.valor, meta: r.meta })
       );
     }
 
     const desaguadorasChart = document.getElementById("desaguadorasChart");
     desaguadorasChart.innerHTML = "";
-    const metaPorDesaguadora =
-      payload.desaguadorasDisponiveis.length > 0
-        ? (payload.metaTurno || payload.metaDia) / payload.desaguadorasDisponiveis.length
-        : 0;
     for (const r of payload.producaoPorDesaguadora) {
       desaguadorasChart.appendChild(
         renderHBarRow({
           label: `DESAGUADORA ${r.maquina}`,
           valor: r.valor,
-          meta: metaPorDesaguadora,
+          meta: r.meta,
           selected: state.maquina === r.maquina,
           onClick: () => { state.maquina = state.maquina === r.maquina ? null : r.maquina; load(); },
         })
       );
     }
-
-    const horaChart = document.getElementById("horaChart");
-    horaChart.innerHTML = "";
-    horaChart.appendChild(
-      renderHBarRow({ label: state.turma || "TODAS", valor: payload.producaoMediaHora, meta: payload.metaHora })
-    );
 
     renderGauge(document.getElementById("gaugeTurno"), payload.producaoTurno, payload.metaTurno, "#c5f249");
     renderGauge(document.getElementById("gaugeDia"), payload.producaoDia, payload.metaDia, "#c1b4ee");

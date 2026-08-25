@@ -11,11 +11,9 @@ export interface Env {
   MS_CLIENT_SECRET: string;
   MS_SHARE_URL: string; // link de compartilhamento do SharePoint (o mesmo colado na conversa)
   MS_SHEET_NAME?: string; // opcional: nome da aba, senão usa a primeira
-  ADMIN_TOKEN: string; // senha simples para liberar edição de metas/upload manual
+  ADMIN_TOKEN: string; // senha simples para liberar upload manual / forçar sync
 
   // Vars (wrangler.jsonc)
-  TURNOS_POR_DIA_PADRAO: string;
-  HORAS_POR_TURNO_PADRAO: string;
   DESAGUADORAS: string; // "01,02,03,04"
   TURMAS: string; // "A,B,C,D,E"
 }

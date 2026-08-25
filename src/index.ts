@@ -2,10 +2,9 @@ import type { Env } from "./types";
 import { buildDashboardPayload } from "./lib/dashboard";
 import { runSync, upsertApontamentos, RETENTION_DAYS } from "./lib/graphSync";
 import { parseWorkbook } from "./lib/parseExcel";
-import { upsertMetaDia, upsertMetaMes } from "./lib/metas";
 import { buildExportWorkbook } from "./lib/exportXlsx";
 import { isAdminRequest } from "./lib/authAdmin";
-import { currentBrazilYearMonth, dayBoundsLocal, daysAgoLocalISOStart, todayBrazilISODate } from "./lib/date";
+import { dayBoundsLocal, daysAgoLocalISOStart } from "./lib/date";
 
 function json(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
@@ -31,38 +30,6 @@ export default {
           date: url.searchParams.get("data") ?? undefined,
         });
         return json(payload);
-      }
-
-      if (pathname === "/api/metas" && request.method === "POST") {
-        if (!isAdminRequest(request, env)) return unauthorized();
-        const body = (await request.json()) as {
-          escopo: "dia" | "mes";
-          referencia?: string;
-          valor: number;
-          turnosPorDia?: number;
-          horasPorTurno?: number;
-          updatedBy?: string;
-        };
-        if (typeof body.valor !== "number" || body.valor < 0) {
-          return json({ erro: "Valor de meta inválido." }, { status: 400 });
-        }
-        if (body.escopo === "dia") {
-          const referencia = body.referencia ?? todayBrazilISODate();
-          await upsertMetaDia(
-            env,
-            referencia,
-            body.valor,
-            body.turnosPorDia ?? (Number(env.TURNOS_POR_DIA_PADRAO) || 4),
-            body.horasPorTurno ?? (Number(env.HORAS_POR_TURNO_PADRAO) || 6),
-            body.updatedBy ?? "gestor"
-          );
-        } else if (body.escopo === "mes") {
-          const referencia = body.referencia ?? currentBrazilYearMonth();
-          await upsertMetaMes(env, referencia, body.valor, body.updatedBy ?? "gestor");
-        } else {
-          return json({ erro: "Escopo inválido, use 'dia' ou 'mes'." }, { status: 400 });
-        }
-        return json({ ok: true });
       }
 
       if (pathname === "/api/sync" && request.method === "POST") {

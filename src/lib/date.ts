@@ -12,11 +12,6 @@ export function todayBrazilISODate(): string {
   return nowBrazil().toISOString().slice(0, 10);
 }
 
-/** Mês local (Brasília) no formato YYYY-MM. */
-export function currentBrazilYearMonth(): string {
-  return nowBrazil().toISOString().slice(0, 7);
-}
-
 /** ISO local (Brasília) de N dias atrás, à meia-noite — usado como início da janela de retenção. */
 export function daysAgoLocalISOStart(days: number): string {
   const d = nowBrazil();
