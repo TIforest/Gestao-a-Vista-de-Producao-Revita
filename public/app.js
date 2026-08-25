@@ -129,19 +129,20 @@
 
   function renderMetaBar(container, pct) {
     container.innerHTML = "";
-    const clamped = Math.max(0, Math.min(100, pct));
+    const real = Math.max(0, pct); // número exibido não tem teto — pode passar de 100%
+    const largura = Math.min(100, real); // a barra em si não estoura o quadro
     const track = document.createElement("div");
     track.className = "meta-bar-track";
 
     const atingido = document.createElement("div");
     atingido.className = "meta-bar-atingido";
-    atingido.style.width = clamped + "%";
-    atingido.textContent = clamped.toFixed(2).replace(".", ",") + "%";
+    atingido.style.width = largura + "%";
+    atingido.textContent = real.toFixed(2).replace(".", ",") + "%";
     track.appendChild(atingido);
 
     const falta = document.createElement("div");
     falta.className = "meta-bar-falta";
-    falta.textContent = (100 - clamped).toFixed(2).replace(".", ",") + "%";
+    falta.textContent = Math.max(0, 100 - real).toFixed(2).replace(".", ",") + "%";
     track.appendChild(falta);
 
     container.appendChild(track);

@@ -140,7 +140,8 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
     metaDia: META_DIA,
     producaoTurno,
     metaTurno: metaTurnoAlvo,
-    percentualMetaAtingida: metaTurnoAlvo > 0 ? Math.min(100, (producaoTurno / metaTurnoAlvo) * 100) : 0,
+    // Sem limite em 100 — se passar da meta, mostra o valor real (ex: 105%).
+    percentualMetaAtingida: metaTurnoAlvo > 0 ? (producaoTurno / metaTurnoAlvo) * 100 : 0,
     // Cada turma tem sua própria produção do turno, sempre comparada com a
     // meta fixa do turno (40.000) — não muda com o filtro "Todas"/turma
     // selecionada, que só afeta a meta do gauge acima.
