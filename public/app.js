@@ -130,8 +130,8 @@
     // "size" é só a unidade interna do desenho (viewBox) — a altura em CSS
     // fica em "auto", então o SVG estica pra preencher a largura real do
     // painel (e o traço acompanha, escalado junto, pela unidade do viewBox).
-    const size = 240;
-    const strokeWidth = 26;
+    const size = 160;
+    const strokeWidth = 16;
     // Espaço pra ponta arredondada do traço (stroke-linecap: round) não
     // cortar na borda do SVG — a ponta se estende ~metade da espessura
     // além do círculo do arco, em qualquer direção.

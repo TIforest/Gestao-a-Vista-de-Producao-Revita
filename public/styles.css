@@ -4,9 +4,6 @@
    como texto sobre fundo branco, então usamos os dois só como preenchimento
    (barras, arcos, badges com fundo escuro) — o texto de leitura sempre usa
    Verde Escuro, que tem alto contraste sobre branco.
-
-   Só os indicadores (barras, gauges, % meta) são maiores que o padrão —
-   pra ler de longe numa TV. O resto do layout fica no tamanho normal.
    ====================================================================== */
 :root {
   --forest-verde-claro: #c5f249;   /* R197 G242 B73 — produção / dado principal */
@@ -142,19 +139,16 @@ body {
   text-transform: uppercase;
 }
 
-/* --- barras horizontais (produção vs meta) — indicador, aumentado --- */
+/* --- barras horizontais (produção vs meta) --- */
 .hbar-chart { display: flex; flex-direction: column; gap: 16px; }
 .hbar-chart--single { justify-content: center; height: 100%; }
 .hbar-chart--tall { gap: 18px; }
-.hbar-row { display: flex; align-items: center; gap: 10px; }
-.hbar-row-label {
-  width: 155px; font-size: 0.95rem; font-weight: 700; flex-shrink: 0;
-  white-space: nowrap; cursor: default; color: var(--text-primary);
-}
+.hbar-row { display: flex; align-items: center; gap: 8px; }
+.hbar-row-label { width: 90px; font-size: 0.8rem; font-weight: 700; flex-shrink: 0; cursor: default; color: var(--text-primary); }
 .hbar-row.clickable { cursor: pointer; }
 .hbar-row.clickable .hbar-row-label { cursor: pointer; }
 .hbar-row.selected .hbar-track { outline: 2px solid var(--color-base-escura); outline-offset: 2px; border-radius: 4px; }
-.hbar-track { position: relative; flex: 1; height: 38px; background: #eef0eb; border-radius: 4px; overflow: visible; }
+.hbar-track { position: relative; flex: 1; height: 22px; background: #eef0eb; border-radius: 4px; overflow: visible; }
 .hbar-fill-meta { position: absolute; inset: 0; background: var(--color-meta); border-radius: 4px; opacity: 0.35; }
 .hbar-fill-valor {
   position: absolute; inset: 0; background: var(--color-dado); border-radius: 4px;
@@ -163,33 +157,33 @@ body {
 .hbar-value-badge {
   position: absolute; top: 50%; transform: translateY(-50%);
   color: var(--color-base-escura);
-  font-size: 0.95rem; font-weight: 700;
+  font-size: 0.72rem; font-weight: 700;
   white-space: nowrap;
   visibility: hidden; /* evita "pulo" visível antes do JS calcular a posição */
 }
 .hbar-meta-label {
-  font-size: 0.9rem; font-weight: 700; color: var(--color-base-escura);
-  background: var(--color-meta); padding: 3px 12px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 700; color: var(--color-base-escura);
+  background: var(--color-meta); padding: 2px 8px; border-radius: 999px;
   margin-left: 8px; white-space: nowrap;
 }
 
-/* --- gauges (semicírculo) — indicador, aumentado --- */
+/* --- gauges (semicírculo) --- */
 .gauge { display: flex; flex-direction: column; align-items: center; }
-.gauge-value { font-size: 2.2rem; font-weight: 800; color: var(--color-base-escura); }
-.gauge-bounds { display: flex; justify-content: space-between; width: 100%; font-size: 0.9rem; font-weight: 700; padding: 0 6px; color: var(--text-muted); }
+.gauge-value { font-size: 1.6rem; font-weight: 800; color: var(--color-base-escura); }
+.gauge-bounds { display: flex; justify-content: space-between; width: 100%; font-size: 0.72rem; font-weight: 700; padding: 0 6px; color: var(--text-muted); }
 
-/* --- barra % meta atingida — indicador, aumentado --- */
-.meta-bar { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+/* --- barra % meta atingida --- */
+.meta-bar { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .meta-bar-track {
-  position: relative; height: 34px; border-radius: 4px; overflow: hidden;
+  position: relative; height: 26px; border-radius: 4px; overflow: hidden;
   display: flex; background: var(--color-neutro);
 }
 .meta-bar-atingido {
   background: var(--color-base-escura);
   display: flex; align-items: center; justify-content: center;
-  color: var(--color-dado); font-weight: 700; font-size: 1.05rem;
+  color: var(--color-dado); font-weight: 700; font-size: 0.75rem;
 }
-.meta-bar-falta { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--color-base-escura); font-weight: 700; font-size: 1.05rem; }
+.meta-bar-falta { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--color-base-escura); font-weight: 700; font-size: 0.75rem; }
 .meta-bar-ticks { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); }
 
 /* --- tabela --- */
