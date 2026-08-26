@@ -128,8 +128,8 @@
   function renderGauge(container, valor, meta, color) {
     container.innerHTML = "";
     const size = 160;
-    const strokeWidth = 16;
-    const pad = 10; // >= metade do traço (8) — suficiente pra ponta arredondada não cortar
+    const strokeWidth = 24; // traço mais grosso, pra barra parecer maior que o número embaixo
+    const pad = strokeWidth / 2 + 2; // >= metade do traço, senão a ponta arredondada corta
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
 
