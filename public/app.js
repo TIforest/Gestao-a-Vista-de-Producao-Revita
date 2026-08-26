@@ -127,15 +127,9 @@
 
   function renderGauge(container, valor, meta, color) {
     container.innerHTML = "";
-    // "size" é só a unidade interna do desenho (viewBox) — a altura em CSS
-    // fica em "auto", então o SVG estica pra preencher a largura real do
-    // painel (e o traço acompanha, escalado junto, pela unidade do viewBox).
     const size = 160;
     const strokeWidth = 16;
-    // Espaço pra ponta arredondada do traço (stroke-linecap: round) não
-    // cortar na borda do SVG — a ponta se estende ~metade da espessura
-    // além do círculo do arco, em qualquer direção.
-    const pad = strokeWidth / 2 + 10;
+    const pad = 10; // >= metade do traço (8) — suficiente pra ponta arredondada não cortar
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
 
@@ -144,9 +138,8 @@
     const cy = r + pad;
     const viewBoxHeight = cy + pad;
     svg.setAttribute("viewBox", `0 0 ${size} ${viewBoxHeight}`);
-    svg.style.width = "100%";
-    svg.style.height = "auto";
-    svg.style.display = "block";
+    svg.setAttribute("width", "100%");
+    svg.setAttribute("height", viewBoxHeight + "px"); // altura fixa — tamanho original, não estica com o painel
 
     const bg = criarArcoMedidor(svgNS, cx, cy, r, 1); // trilho sempre completo, 0% a 100%
     for (const path of bg.children) {
