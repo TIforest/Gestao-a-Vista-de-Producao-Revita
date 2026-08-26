@@ -58,6 +58,16 @@ export default {
         return json({ ok: true, linhas: rows.length, warnings });
       }
 
+      if (pathname === "/api/debug" && request.method === "GET") {
+        if (!isAdminRequest(request, env)) return unauthorized();
+        const apontamentos = await env.DB.prepare(
+          "SELECT COUNT(*) AS total, MIN(data_hora) AS mais_antigo, MAX(data_hora) AS mais_novo FROM apontamentos"
+        ).first();
+        const producaoMensal = await env.DB.prepare("SELECT * FROM producao_mensal ORDER BY ano_mes").all();
+        const syncState = await env.DB.prepare("SELECT * FROM sync_state WHERE id = 1").first();
+        return json({ apontamentos, producaoMensal: producaoMensal.results, syncState });
+      }
+
       if (pathname === "/api/export" && request.method === "GET") {
         const filters = {
           turma: url.searchParams.get("turma") ?? undefined,
