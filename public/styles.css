@@ -217,5 +217,18 @@ tbody tr:nth-child(even) { background: #faf9f5; }
       "tabela";
   }
   .turmas-list { flex-direction: row; flex-wrap: wrap; }
-  .turma-box { flex: 1 1 60px; min-height: 44px; }
+  .turma-box { flex: 1 1 60px; min-height: 48px; } /* alvo de toque maior que os 44px do desktop */
+
+  /* Cabeçalho não cabe numa linha só em tela de celular — quebra em 3 linhas
+     (marca+botão, título, status da sincronização) em vez de espremer tudo. */
+  .topbar { flex-wrap: wrap; row-gap: 6px; padding: 10px 14px; }
+  .title { order: 3; flex: 1 1 100%; font-size: 1.15rem; }
+  .sync-info { order: 4; flex: 1 1 100%; margin: 0; white-space: normal; }
+  .topbar-actions { margin-left: auto; }
+  .btn { padding: 10px 14px; font-size: 0.9rem; } /* alvo de toque melhor no celular */
+
+  /* Rótulo da barra mais estreito, senão sobra pouco espaço pra barra em si
+     numa tela de ~360-400px de largura. */
+  .hbar-row-label { width: 74px; font-size: 0.74rem; }
+  .hbar-meta-label { font-size: 0.68rem; padding: 2px 7px; }
 }

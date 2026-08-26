@@ -29,8 +29,20 @@
     "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO",
   ];
 
+  // Timeout pra nunca ficar "travado" sem feedback — se a rede/servidor
+  // não responder em 12s, desiste e mostra erro em vez de ficar pendurado.
+  async function fetchComTimeout(path, opts, timeoutMs = 12000) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(path, { ...opts, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   async function apiGet(path) {
-    const res = await fetch(path);
+    const res = await fetchComTimeout(path);
     if (!res.ok) throw new Error(`Erro ${res.status} ao consultar ${path}`);
     return res.json();
   }
@@ -299,10 +311,27 @@
       render(payload);
     } catch (err) {
       console.error(err);
+      const syncInfo = document.getElementById("syncInfo");
+      syncInfo.textContent = "Não consegui atualizar agora (" + err.message + ") — tentando de novo sozinho.";
     }
   }
 
-  document.getElementById("btnRefresh").addEventListener("click", load);
+  const btnRefresh = document.getElementById("btnRefresh");
+  btnRefresh.addEventListener("click", async () => {
+    btnRefresh.disabled = true;
+    const textoOriginal = btnRefresh.textContent;
+    btnRefresh.textContent = "↻ Atualizando…";
+    try {
+      // Força o servidor a checar o SharePoint na hora, além de recarregar
+      // a tela — se essa parte falhar (rede lenta, SharePoint fora), ainda
+      // assim recarrega com o que já tiver no banco.
+      await fetchComTimeout("/api/sync", { method: "POST" }, 15000).catch((err) => console.warn("Forçar sync falhou:", err.message));
+      await load();
+    } finally {
+      btnRefresh.disabled = false;
+      btnRefresh.textContent = textoOriginal;
+    }
+  });
 
   load();
   setInterval(load, REFRESH_MS);

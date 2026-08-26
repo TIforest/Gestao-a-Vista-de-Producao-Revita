@@ -32,8 +32,10 @@ export default {
         return json(payload);
       }
 
+      // Sem token: é só "forçar checagem agora", usado pelo botão Atualizar
+      // do painel (que qualquer um no chão de fábrica pode clicar). Upload
+      // manual e o /api/debug continuam protegidos, esse não precisa.
       if (pathname === "/api/sync" && request.method === "POST") {
-        if (!isAdminRequest(request, env)) return unauthorized();
         const result = await runSync(env, { force: true });
         return json(result);
       }
