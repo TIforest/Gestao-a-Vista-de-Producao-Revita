@@ -7,6 +7,7 @@
   };
 
   const REFRESH_MS = 30_000; // o servidor checa o SharePoint a cada 1 min; o painel rebusca o dashboard a cada 30s.
+  const FORCE_SYNC_MS = 5 * 60_000; // redundância: o navegador também força sincronização, independente do cron do servidor.
 
   function fmtTon(valor) {
     const ton = (valor || 0) / 1000; // peso_seco vem em kg — dividir por 1000 já dá toneladas
@@ -316,17 +317,21 @@
     }
   }
 
+  // Força o servidor a checar o SharePoint na hora, além de recarregar a
+  // tela — se essa parte falhar (rede lenta, SharePoint/D1 fora do ar),
+  // ainda assim recarrega com o que já tiver no banco.
+  async function forcarSincronizacao() {
+    await fetchComTimeout("/api/sync", { method: "POST" }, 15000).catch((err) => console.warn("Forçar sync falhou:", err.message));
+    await load();
+  }
+
   const btnRefresh = document.getElementById("btnRefresh");
   btnRefresh.addEventListener("click", async () => {
     btnRefresh.disabled = true;
     const textoOriginal = btnRefresh.textContent;
     btnRefresh.textContent = "↻ Atualizando…";
     try {
-      // Força o servidor a checar o SharePoint na hora, além de recarregar
-      // a tela — se essa parte falhar (rede lenta, SharePoint fora), ainda
-      // assim recarrega com o que já tiver no banco.
-      await fetchComTimeout("/api/sync", { method: "POST" }, 15000).catch((err) => console.warn("Forçar sync falhou:", err.message));
-      await load();
+      await forcarSincronizacao();
     } finally {
       btnRefresh.disabled = false;
       btnRefresh.textContent = textoOriginal;
@@ -335,4 +340,9 @@
 
   load();
   setInterval(load, REFRESH_MS);
+  // Redundância: mesmo com o cron do servidor rodando de 1 em 1 minuto,
+  // o navegador (que fica aberto o dia todo, numa TV) também força uma
+  // sincronização de tempos em tempos por conta própria — não depende só
+  // do cron do lado do servidor pra insistir quando algo falha.
+  setInterval(forcarSincronizacao, FORCE_SYNC_MS);
 })();

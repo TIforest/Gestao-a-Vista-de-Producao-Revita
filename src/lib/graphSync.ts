@@ -35,6 +35,23 @@ async function fetchWithRetry(url: string, init: RequestInit, attempts = 4): Pro
   throw lastErr;
 }
 
+// O D1 volta e meia devolve "storage operation exceeded timeout" — igual o
+// 503 do SharePoint, é instabilidade passageira do serviço, não bug nosso.
+// Com uma sincronização fazendo dezenas de leituras/gravações em sequência,
+// uma falha dessas em qualquer uma já derrubava a sincronização inteira.
+async function comRetry<T>(fn: () => Promise<T>, attempts = 3): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      if (i < attempts - 1) await new Promise((resolve) => setTimeout(resolve, 300 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 async function getGraphToken(env: Env): Promise<string> {
   const res = await fetch(`https://login.microsoftonline.com/${env.MS_TENANT_ID}/oauth2/v2.0/token`, {
     method: "POST",
@@ -87,14 +104,18 @@ export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise
     }
     const meta = (await metaRes.json()) as DriveItemMeta;
 
-    const current = await env.DB.prepare("SELECT sharepoint_last_modified FROM sync_state WHERE id = 1").first<{
-      sharepoint_last_modified: string | null;
-    }>();
+    const current = await comRetry(() =>
+      env.DB.prepare("SELECT sharepoint_last_modified FROM sync_state WHERE id = 1").first<{
+        sharepoint_last_modified: string | null;
+      }>()
+    );
 
     if (!opts.force && current?.sharepoint_last_modified === meta.lastModifiedDateTime) {
-      await env.DB.prepare(
-        "UPDATE sync_state SET last_sync_at = datetime('now'), last_sync_status = 'sem_alteracao', last_error = NULL WHERE id = 1"
-      ).run();
+      await comRetry(() =>
+        env.DB.prepare(
+          "UPDATE sync_state SET last_sync_at = datetime('now'), last_sync_status = 'sem_alteracao', last_error = NULL WHERE id = 1"
+        ).run()
+      );
       return { status: "sem_alteracao", rows: 0, warnings: [], sharepointLastModified: meta.lastModifiedDateTime };
     }
 
@@ -112,21 +133,30 @@ export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise
     await upsertApontamentos(env, rows);
     await pruneOldApontamentos(env, windowStart);
 
-    await env.DB.prepare(
-      `UPDATE sync_state SET sharepoint_last_modified = ?, last_sync_at = datetime('now'),
-       last_sync_status = 'sincronizado', last_sync_rows = ?, last_error = NULL WHERE id = 1`
-    )
-      .bind(meta.lastModifiedDateTime, rows.length)
-      .run();
+    await comRetry(() =>
+      env.DB.prepare(
+        `UPDATE sync_state SET sharepoint_last_modified = ?, last_sync_at = datetime('now'),
+         last_sync_status = 'sincronizado', last_sync_rows = ?, last_error = NULL WHERE id = 1`
+      )
+        .bind(meta.lastModifiedDateTime, rows.length)
+        .run()
+    );
 
     return { status: "sincronizado", rows: rows.length, warnings, sharepointLastModified: meta.lastModifiedDateTime };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await env.DB.prepare(
-      "UPDATE sync_state SET last_sync_at = datetime('now'), last_sync_status = 'erro', last_error = ? WHERE id = 1"
-    )
-      .bind(message)
-      .run();
+    try {
+      await comRetry(() =>
+        env.DB.prepare(
+          "UPDATE sync_state SET last_sync_at = datetime('now'), last_sync_status = 'erro', last_error = ? WHERE id = 1"
+        )
+          .bind(message)
+          .run()
+      );
+    } catch {
+      // Se nem isso conseguir gravar, o D1 está mesmo fora do ar — a tela vai
+      // continuar mostrando o último estado bom conhecido até a próxima tentativa.
+    }
     return { status: "erro", rows: 0, warnings: [], error: message };
   }
 }
@@ -139,9 +169,11 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
     // Descobre quais hashes já existem, pra só somar no acumulado mensal
     // as linhas genuinamente novas (evita contar de novo em cada sync).
     const placeholders = chunk.map(() => "?").join(",");
-    const existing = await env.DB.prepare(`SELECT row_hash FROM apontamentos WHERE row_hash IN (${placeholders})`)
-      .bind(...chunk.map((r) => r.row_hash))
-      .all<{ row_hash: string }>();
+    const existing = await comRetry(() =>
+      env.DB.prepare(`SELECT row_hash FROM apontamentos WHERE row_hash IN (${placeholders})`)
+        .bind(...chunk.map((r) => r.row_hash))
+        .all<{ row_hash: string }>()
+    );
     const existingHashes = new Set(existing.results.map((r) => r.row_hash));
     const novas = chunk.filter((r) => !existingHashes.has(r.row_hash));
 
@@ -152,16 +184,18 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
         porMes.set(anoMes, (porMes.get(anoMes) ?? 0) + row.peso_seco);
       }
       for (const [anoMes, delta] of porMes) {
-        await env.DB.prepare(
-          `INSERT INTO producao_mensal (ano_mes, total_peso, linhas_contadas, updated_at)
-           VALUES (?, ?, ?, datetime('now'))
-           ON CONFLICT(ano_mes) DO UPDATE SET
-             total_peso = total_peso + excluded.total_peso,
-             linhas_contadas = linhas_contadas + excluded.linhas_contadas,
-             updated_at = excluded.updated_at`
-        )
-          .bind(anoMes, delta, novas.filter((r) => r.data_hora.slice(0, 7) === anoMes).length)
-          .run();
+        await comRetry(() =>
+          env.DB.prepare(
+            `INSERT INTO producao_mensal (ano_mes, total_peso, linhas_contadas, updated_at)
+             VALUES (?, ?, ?, datetime('now'))
+             ON CONFLICT(ano_mes) DO UPDATE SET
+               total_peso = total_peso + excluded.total_peso,
+               linhas_contadas = linhas_contadas + excluded.linhas_contadas,
+               updated_at = excluded.updated_at`
+          )
+            .bind(anoMes, delta, novas.filter((r) => r.data_hora.slice(0, 7) === anoMes).length)
+            .run()
+        );
       }
     }
 
@@ -185,12 +219,12 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
         row.produto
       )
     );
-    if (stmts.length > 0) await env.DB.batch(stmts);
+    if (stmts.length > 0) await comRetry(() => env.DB.batch(stmts));
   }
 }
 
 async function pruneOldApontamentos(env: Env, windowStartISO: string): Promise<void> {
-  await env.DB.prepare("DELETE FROM apontamentos WHERE data_hora < ?").bind(windowStartISO).run();
+  await comRetry(() => env.DB.prepare("DELETE FROM apontamentos WHERE data_hora < ?").bind(windowStartISO).run());
 }
 
 export { upsertApontamentos };
