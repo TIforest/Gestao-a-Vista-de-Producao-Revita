@@ -8,7 +8,7 @@
 :root {
   --forest-verde-claro: #c5f249;   /* R197 G242 B73 — produção / dado principal */
   --forest-verde-escuro: #0a252a;  /* R10 G37 B42   — texto, header, UI escura */
-  --forest-bege-kraft: #b19873;    /* R177 G152 B115 — neutro / "falta meta" */
+  --forest-bege-kraft: #a6a6a6;    /* cinza — neutro / "falta meta" (era bege kraft R177 G152 B115) */
   --forest-roxo-destaque: #c1b4ee; /* R193 G180 B238 — meta / destaque */
   --forest-white: #ffffff;
 
@@ -148,7 +148,7 @@ body {
 .hbar-row.clickable { cursor: pointer; }
 .hbar-row.clickable .hbar-row-label { cursor: pointer; }
 .hbar-row.selected .hbar-track { outline: 2px solid var(--color-base-escura); outline-offset: 2px; border-radius: 4px; }
-.hbar-track { position: relative; flex: 1; height: 22px; background: #eef0eb; border-radius: 4px; overflow: visible; }
+.hbar-track { position: relative; flex: 1; height: 28px; background: #eef0eb; border-radius: 4px; overflow: visible; }
 .hbar-fill-meta { position: absolute; inset: 0; background: var(--color-meta); border-radius: 4px; opacity: 0.35; }
 .hbar-fill-valor {
   position: absolute; inset: 0; background: var(--color-dado); border-radius: 4px;

@@ -156,7 +156,7 @@
 
     const bg = criarArcoMedidor(svgNS, cx, cy, r, 1); // trilho sempre completo, 0% a 100%
     for (const path of bg.children) {
-      path.setAttribute("stroke", "#b19873"); // bege kraft — trilho do gauge sempre visível, mesmo com valor 0
+      path.setAttribute("stroke", "#a6a6a6"); // cinza — trilho do gauge sempre visível, mesmo com valor 0
       path.setAttribute("stroke-width", String(strokeWidth));
     }
     svg.appendChild(bg);
@@ -239,12 +239,15 @@
 
     const turmaChart = document.getElementById("producaoTurmaChart");
     turmaChart.innerHTML = "";
+    // Com só 1 turma filtrada sobra espaço vazio no resto do quadrado — centraliza
+    // a linha única verticalmente e dá um leve destaque nela.
+    turmaChart.classList.toggle("hbar-chart--single", !!state.turma);
     const linhasTurma = state.turma
       ? payload.producaoPorTurma.filter((r) => r.turma === state.turma)
       : payload.producaoPorTurma;
     for (const r of linhasTurma) {
       turmaChart.appendChild(
-        renderHBarRow({ label: r.turma, valor: r.valor, meta: r.meta })
+        renderHBarRow({ label: r.turma, valor: r.valor, meta: r.meta, selected: !!state.turma })
       );
     }
 
