@@ -53,22 +53,15 @@ export interface ParseResult {
   warnings: string[];
 }
 
-export async function parseWorkbook(
-  buffer: ArrayBuffer,
-  sheetName?: string,
-  windowStartISO?: string
-): Promise<ParseResult> {
+/**
+ * Núcleo compartilhado: dado um "table" já em memória (linha 0 = cabeçalho,
+ * demais = dados — não importa se veio do SheetJS lendo um .xlsx binário ou
+ * direto da API de Range do Graph como JSON), monta os Apontamento[].
+ * Mantido separado do "como conseguir o table" pra reaproveitar entre as
+ * duas fontes sem duplicar a lógica de colunas/validação/hash.
+ */
+async function linhasDeTabela(table: unknown[][], windowStartISO?: string): Promise<ParseResult> {
   const warnings: string[] = [];
-  const workbook = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
-  const targetSheet = sheetName && workbook.Sheets[sheetName] ? sheetName : workbook.SheetNames[0];
-  const sheet = workbook.Sheets[targetSheet as string];
-  if (!sheet) return { rows: [], warnings: [`Aba "${targetSheet}" não encontrada na planilha.`] };
-
-  // raw:true entrega valores nativos (Date para células de data/hora com
-  // cellDates, number para células numéricas) em vez de texto formatado —
-  // muito mais confiável do que tentar decifrar strings pré-formatadas
-  // (formato de data/hora e separador decimal variam por planilha/locale).
-  const table: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
   if (table.length < 2) return { rows: [], warnings: ["Planilha vazia ou sem linhas de dados."] };
 
   const headers = (table[0] as unknown[]).map((h) => String(h ?? ""));
@@ -144,4 +137,43 @@ export async function parseWorkbook(
   }
 
   return { rows, warnings };
+}
+
+/**
+ * Caminho usado pelo upload manual (/api/upload): recebe o .xlsx binário
+ * inteiro e usa o SheetJS pra ler. Mais pesado (processa o arquivo inteiro),
+ * mas é só quando alguém sobe um arquivo de próprio punho — não roda toda
+ * hora como a sincronização automática (ver parseGraphRangeValues).
+ */
+export async function parseWorkbook(
+  buffer: ArrayBuffer,
+  sheetName?: string,
+  windowStartISO?: string
+): Promise<ParseResult> {
+  const workbook = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
+  const targetSheet = sheetName && workbook.Sheets[sheetName] ? sheetName : workbook.SheetNames[0];
+  const sheet = workbook.Sheets[targetSheet as string];
+  if (!sheet) return { rows: [], warnings: [`Aba "${targetSheet}" não encontrada na planilha.`] };
+
+  // raw:true entrega valores nativos (Date para células de data/hora com
+  // cellDates, number para células numéricas) em vez de texto formatado —
+  // muito mais confiável do que tentar decifrar strings pré-formatadas
+  // (formato de data/hora e separador decimal variam por planilha/locale).
+  const table: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+  return linhasDeTabela(table, windowStartISO);
+}
+
+/**
+ * Caminho usado pela sincronização automática: recebe só um pedaço da
+ * planilha (cabeçalho + últimas N linhas) já como valores, vindo da API de
+ * Range do Microsoft Graph — sem baixar/processar o arquivo inteiro. Ver
+ * fetchRecentRowsViaGraphRange em graphSync.ts.
+ */
+export async function parseGraphRangeValues(
+  headerRow: unknown[],
+  dataRows: unknown[][],
+  windowStartISO?: string
+): Promise<ParseResult> {
+  const table: unknown[][] = [headerRow, ...dataRows];
+  return linhasDeTabela(table, windowStartISO);
 }

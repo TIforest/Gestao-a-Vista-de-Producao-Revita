@@ -1,6 +1,6 @@
 import type { Env } from "../types";
 import { encodeSharingUrl } from "./shareLink";
-import { parseWorkbook } from "./parseExcel";
+import { parseWorkbook, parseGraphRangeValues } from "./parseExcel";
 import { daysAgoLocalISOStart } from "./date";
 
 // O painel não guarda o histórico completo da planilha — só uma janela
@@ -9,6 +9,16 @@ import { daysAgoLocalISOStart } from "./date";
 // incrementado conforme cada linha nova aparece, sem precisar reprocessar
 // milhares de linhas antigas a cada sincronização.
 export const RETENTION_DAYS = 3;
+
+// Quantas linhas (de trás pra frente) pedir na sincronização automática.
+// A planilha de origem já passa de 11 mil linhas (todo o histórico desde
+// junho) e cresce ~150-200 linhas/dia — baixar e processar o arquivo
+// inteiro (como fazíamos antes, via SheetJS) estourava o limite de CPU do
+// Worker sempre que o arquivo mudava. Com a API de Range do Graph, pedimos
+// só as últimas N linhas diretamente à Microsoft (ela computa o recorte do
+// lado dela) — folga generosa sobre RETENTION_DAYS pra cobrir dias mais
+// cheios e retomadas depois de uma parada.
+const LINHAS_RECENTES = 1500;
 
 interface TokenResponse {
   access_token: string;
@@ -76,6 +86,81 @@ interface DriveItemMeta {
   parentReference: { driveId: string };
 }
 
+function colIndexToLetter(n: number): string {
+  // n é base-1 (1 = A)
+  let s = "";
+  let num = n;
+  while (num > 0) {
+    const rem = (num - 1) % 26;
+    s = String.fromCharCode(65 + rem) + s;
+    num = Math.floor((num - 1) / 26);
+  }
+  return s;
+}
+
+/** Nome da aba a usar: a configurada em MS_SHEET_NAME se existir na planilha, senão a primeira. */
+async function resolverNomeAba(
+  driveId: string,
+  itemId: string,
+  token: string,
+  sheetNameConfigurada?: string
+): Promise<string> {
+  const res = await fetchWithRetry(
+    `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/workbook/worksheets?$select=name`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!res.ok) throw new Error(`Falha ao listar abas da planilha (${res.status}): ${await res.text()}`);
+  const data = (await res.json()) as { value: { name: string }[] };
+  const nomes = data.value.map((s) => s.name);
+  if (sheetNameConfigurada && nomes.includes(sheetNameConfigurada)) return sheetNameConfigurada;
+  const primeira = nomes[0];
+  if (!primeira) throw new Error("Planilha sem nenhuma aba.");
+  return primeira;
+}
+
+/**
+ * Busca só as últimas `LINHAS_RECENTES` linhas da planilha via API de Range
+ * do Graph — sem baixar o arquivo .xlsx inteiro. Faz 3 chamadas leves:
+ * dimensão da área usada (só contagem, sem valores), cabeçalho (1 linha) e
+ * o recorte final (N linhas). Cada uma custa bytes/CPU proporcionais só ao
+ * que pede, não ao tamanho total da planilha.
+ */
+async function buscarLinhasRecentesViaRange(
+  env: Env,
+  token: string,
+  driveId: string,
+  itemId: string
+): Promise<{ headerRow: unknown[]; dataRows: unknown[][] }> {
+  const sheetName = await resolverNomeAba(driveId, itemId, token, env.MS_SHEET_NAME);
+  const sheetPath = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/workbook/worksheets('${encodeURIComponent(sheetName)}')`;
+
+  const dimRes = await fetchWithRetry(
+    `${sheetPath}/usedRange(valuesOnly=true)?$select=rowCount,columnCount`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!dimRes.ok) throw new Error(`Falha ao consultar tamanho da planilha (${dimRes.status}): ${await dimRes.text()}`);
+  const dim = (await dimRes.json()) as { rowCount: number; columnCount: number };
+  const lastCol = colIndexToLetter(dim.columnCount);
+
+  const headerRes = await fetchWithRetry(
+    `${sheetPath}/range(address='A1:${lastCol}1')?$select=values`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!headerRes.ok) throw new Error(`Falha ao ler cabeçalho da planilha (${headerRes.status}): ${await headerRes.text()}`);
+  const headerData = (await headerRes.json()) as { values: unknown[][] };
+  const headerRow = headerData.values[0] ?? [];
+
+  const startRow = Math.max(2, dim.rowCount - LINHAS_RECENTES + 1);
+  const dataRes = await fetchWithRetry(
+    `${sheetPath}/range(address='A${startRow}:${lastCol}${dim.rowCount}')?$select=values`,
+    { headers: { Authorization: `Bearer ${token}` } }
+  );
+  if (!dataRes.ok) throw new Error(`Falha ao ler linhas recentes da planilha (${dataRes.status}): ${await dataRes.text()}`);
+  const rangeData = (await dataRes.json()) as { values: unknown[][] };
+
+  return { headerRow, dataRows: rangeData.values };
+}
+
 export interface SyncResult {
   status: "sem_alteracao" | "sincronizado" | "erro";
   rows: number;
@@ -119,17 +204,15 @@ export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise
       return { status: "sem_alteracao", rows: 0, warnings: [], sharepointLastModified: meta.lastModifiedDateTime };
     }
 
-    const contentRes = await fetchWithRetry(
-      `https://graph.microsoft.com/v1.0/drives/${meta.parentReference.driveId}/items/${meta.id}/content`,
-      { headers: { Authorization: `Bearer ${token}` } }
+    const { headerRow, dataRows } = await buscarLinhasRecentesViaRange(
+      env,
+      token,
+      meta.parentReference.driveId,
+      meta.id
     );
-    if (!contentRes.ok) {
-      throw new Error(`Falha ao baixar planilha (${contentRes.status}): ${await contentRes.text()}`);
-    }
-    const buffer = await contentRes.arrayBuffer();
 
     const windowStart = daysAgoLocalISOStart(RETENTION_DAYS);
-    const { rows, warnings } = await parseWorkbook(buffer, env.MS_SHEET_NAME, windowStart);
+    const { rows, warnings } = await parseGraphRangeValues(headerRow, dataRows, windowStart);
     await upsertApontamentos(env, rows);
     await pruneOldApontamentos(env, windowStart);
 

@@ -53,14 +53,28 @@ interface TimeParts {
   s: number;
 }
 
+// Serial de data do Excel -> dias desde a época Unix. 25569 é a distância
+// entre a época do Excel (30/12/1899, já compensando o bug do "ano bissexto
+// 1900" que o próprio Excel tem) e 01/01/1970. Fórmula padrão, mesma que a
+// maioria das bibliotecas (incluindo o SheetJS) usa internamente.
+function excelSerialToUTCDate(serial: number): Date {
+  return new Date(Math.round((serial - 25569) * 86400 * 1000));
+}
+
 /**
- * Extrai ano/mês/dia de uma célula de data. SheetJS (com cellDates+raw:true)
- * entrega Date "naive-UTC": os getters UTC reproduzem exatamente o valor
- * exibido na planilha, sem qualquer conversão de fuso horário real.
+ * Extrai ano/mês/dia de uma célula de data. Aceita Date "naive-UTC" (vindo
+ * do SheetJS com cellDates+raw:true), texto, ou o número de série do Excel
+ * (vindo direto da API de Range do Graph, sem passar pelo SheetJS).
  */
 export function dateParts(cell: unknown): DateParts | null {
   if (cell instanceof Date) {
     return { y: cell.getUTCFullYear(), m: cell.getUTCMonth() + 1, d: cell.getUTCDate() };
+  }
+  if (typeof cell === "number" && Number.isFinite(cell)) {
+    // Só a parte inteira (dias) importa aqui — a fração (hora do dia), se
+    // houver, fica pro timeParts.
+    const dt = excelSerialToUTCDate(Math.floor(cell));
+    return { y: dt.getUTCFullYear(), m: dt.getUTCMonth() + 1, d: dt.getUTCDate() };
   }
   if (typeof cell === "string") {
     const s = cell.trim();
@@ -74,10 +88,16 @@ export function dateParts(cell: unknown): DateParts | null {
   return null;
 }
 
-/** Extrai hora/minuto/segundo de uma célula de hora (Date "naive-UTC" ou texto "HH:MM[:SS][ AM/PM]"). */
+/** Extrai hora/minuto/segundo de uma célula de hora (Date "naive-UTC", número de série do Excel, ou texto "HH:MM[:SS][ AM/PM]"). */
 export function timeParts(cell: unknown): TimeParts | null {
   if (cell instanceof Date) {
     return { h: cell.getUTCHours(), min: cell.getUTCMinutes(), s: cell.getUTCSeconds() };
+  }
+  if (typeof cell === "number" && Number.isFinite(cell)) {
+    // Só a parte fracionária (fração do dia) importa aqui.
+    const frac = cell - Math.floor(cell);
+    const totalSegundos = Math.round(frac * 86400);
+    return { h: Math.floor(totalSegundos / 3600), min: Math.floor((totalSegundos % 3600) / 60), s: totalSegundos % 60 };
   }
   if (typeof cell === "string") {
     const m = cell.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?$/i);
