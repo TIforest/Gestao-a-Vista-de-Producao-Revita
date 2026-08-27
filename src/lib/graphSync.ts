@@ -168,12 +168,16 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
 
     // Descobre quais hashes já existem, pra só somar no acumulado mensal
     // as linhas genuinamente novas (evita contar de novo em cada sync).
+    // Sem retry aqui de propósito: são ~2-3 chamadas ao D1 por bloco de 50
+    // linhas, dezenas de blocos por sincronização — tentar de novo cada uma
+    // (visto na prática) pode multiplicar o tempo total a ponto do Worker
+    // estourar o limite de recursos quando o D1 está mesmo instável, o que é
+    // pior do que simplesmente falhar rápido e deixar a próxima tentativa
+    // (cron de 1 min, ou o auto-sync do navegador) resolver.
     const placeholders = chunk.map(() => "?").join(",");
-    const existing = await comRetry(() =>
-      env.DB.prepare(`SELECT row_hash FROM apontamentos WHERE row_hash IN (${placeholders})`)
-        .bind(...chunk.map((r) => r.row_hash))
-        .all<{ row_hash: string }>()
-    );
+    const existing = await env.DB.prepare(`SELECT row_hash FROM apontamentos WHERE row_hash IN (${placeholders})`)
+      .bind(...chunk.map((r) => r.row_hash))
+      .all<{ row_hash: string }>();
     const existingHashes = new Set(existing.results.map((r) => r.row_hash));
     const novas = chunk.filter((r) => !existingHashes.has(r.row_hash));
 
@@ -184,18 +188,16 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
         porMes.set(anoMes, (porMes.get(anoMes) ?? 0) + row.peso_seco);
       }
       for (const [anoMes, delta] of porMes) {
-        await comRetry(() =>
-          env.DB.prepare(
-            `INSERT INTO producao_mensal (ano_mes, total_peso, linhas_contadas, updated_at)
-             VALUES (?, ?, ?, datetime('now'))
-             ON CONFLICT(ano_mes) DO UPDATE SET
-               total_peso = total_peso + excluded.total_peso,
-               linhas_contadas = linhas_contadas + excluded.linhas_contadas,
-               updated_at = excluded.updated_at`
-          )
-            .bind(anoMes, delta, novas.filter((r) => r.data_hora.slice(0, 7) === anoMes).length)
-            .run()
-        );
+        await env.DB.prepare(
+          `INSERT INTO producao_mensal (ano_mes, total_peso, linhas_contadas, updated_at)
+           VALUES (?, ?, ?, datetime('now'))
+           ON CONFLICT(ano_mes) DO UPDATE SET
+             total_peso = total_peso + excluded.total_peso,
+             linhas_contadas = linhas_contadas + excluded.linhas_contadas,
+             updated_at = excluded.updated_at`
+        )
+          .bind(anoMes, delta, novas.filter((r) => r.data_hora.slice(0, 7) === anoMes).length)
+          .run();
       }
     }
 
@@ -219,12 +221,12 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
         row.produto
       )
     );
-    if (stmts.length > 0) await comRetry(() => env.DB.batch(stmts));
+    if (stmts.length > 0) await env.DB.batch(stmts);
   }
 }
 
 async function pruneOldApontamentos(env: Env, windowStartISO: string): Promise<void> {
-  await comRetry(() => env.DB.prepare("DELETE FROM apontamentos WHERE data_hora < ?").bind(windowStartISO).run());
+  await env.DB.prepare("DELETE FROM apontamentos WHERE data_hora < ?").bind(windowStartISO).run();
 }
 
 export { upsertApontamentos };
