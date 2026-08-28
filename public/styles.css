@@ -169,8 +169,12 @@ body {
 
 /* --- gauges (semicírculo) --- */
 .gauge { display: flex; flex-direction: column; align-items: center; }
-.gauge-value { font-size: 1.6rem; font-weight: 800; color: var(--color-base-escura); }
-.gauge-bounds { display: flex; justify-content: space-between; width: 100%; font-size: 0.72rem; font-weight: 700; padding: 0 6px; color: var(--text-muted); }
+.gauge-arc-wrap { position: relative; }
+.gauge-value {
+  position: absolute; left: 50%; transform: translate(-50%, -50%);
+  font-size: 1.6rem; font-weight: 800; color: var(--color-base-escura); white-space: nowrap;
+}
+.gauge-bounds { display: flex; justify-content: space-between; font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
 
 /* --- barra % meta atingida --- */
 .meta-bar { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }

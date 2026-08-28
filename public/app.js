@@ -151,7 +151,10 @@
     const cy = r + pad;
     const viewBoxHeight = cy + pad;
     svg.setAttribute("viewBox", `0 0 ${size} ${viewBoxHeight}`);
-    svg.setAttribute("width", "100%");
+    // largura fixa (não mais 100%) — assim o arco tem um tamanho de caixa
+    // conhecido, e o número/rótulos abaixo conseguem se alinhar exatamente
+    // com ele em vez de espalhar pela largura toda do painel.
+    svg.setAttribute("width", size + "px");
     svg.setAttribute("height", viewBoxHeight + "px"); // altura fixa — tamanho original, não estica com o painel
 
     const bg = criarArcoMedidor(svgNS, cx, cy, r, 1); // trilho sempre completo, 0% a 100%
@@ -170,17 +173,28 @@
     }
     svg.appendChild(fg);
 
-    container.appendChild(svg);
+    const arcWrap = document.createElement("div");
+    arcWrap.className = "gauge-arc-wrap";
+    arcWrap.style.width = size + "px";
+    arcWrap.appendChild(svg);
 
     // Texto sempre em verde-escuro: verde-claro/roxo-destaque têm baixo
     // contraste como texto sobre fundo branco, então servem só para o arco.
+    // Sobreposto dentro do arco (na altura da linha de base/"pés" do
+    // semicírculo), como no BI original, em vez de ficar solto embaixo.
     const value = document.createElement("div");
     value.className = "gauge-value";
+    value.style.top = cy + "px";
     value.textContent = fmtTon(valor);
-    container.appendChild(value);
+    arcWrap.appendChild(value);
 
+    container.appendChild(arcWrap);
+
+    // Mesma largura fixa do arco, pra "0,000 Ton" e a meta ficarem perto
+    // das pontas do arco em vez de espalhados pela largura do painel.
     const bounds = document.createElement("div");
     bounds.className = "gauge-bounds";
+    bounds.style.width = size + "px";
     bounds.innerHTML = `<span>0,000 Ton</span><span>${fmtTon(meta)}</span>`;
     container.appendChild(bounds);
   }
