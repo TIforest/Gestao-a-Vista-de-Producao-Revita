@@ -7,7 +7,12 @@
   };
 
   const REFRESH_MS = 30_000; // o servidor checa o SharePoint a cada 1 min; o painel rebusca o dashboard a cada 30s.
-  const FORCE_SYNC_MS = 5 * 60_000; // redundância: o navegador também força sincronização, independente do cron do servidor.
+  // 1 min em vez de 5: enquanto o cron do servidor está travado por um bug
+  // da própria Cloudflare (ver SUPORTE_CLOUDFLARE.txt), o navegador que
+  // ficar com essa aba aberta (a TV) vira o mecanismo principal de
+  // atualização automática, não só uma redundância. Voltar pra 5 min depois
+  // que o suporte confirmar que o cron voltou a disparar sozinho.
+  const FORCE_SYNC_MS = 60_000;
 
   function fmtTon(valor) {
     const ton = (valor || 0) / 1000; // peso_seco vem em kg — dividir por 1000 já dá toneladas
