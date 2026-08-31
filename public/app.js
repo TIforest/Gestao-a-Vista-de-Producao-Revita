@@ -184,7 +184,10 @@
     // semicírculo), como no BI original, em vez de ficar solto embaixo.
     const value = document.createElement("div");
     value.className = "gauge-value";
-    value.style.top = cy + "px";
+    // Um pouco acima da linha de base (pés do semicírculo): na própria
+    // linha de base o traço arredondado das pontas do arco desce até ali,
+    // e o número (principalmente com texto longo) acabava encostando nele.
+    value.style.top = (cy - 20) + "px";
     value.textContent = fmtTon(valor);
     arcWrap.appendChild(value);
 

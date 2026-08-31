@@ -168,7 +168,7 @@ body {
 }
 
 /* --- gauges (semicírculo) --- */
-.gauge { display: flex; flex-direction: column; align-items: center; }
+.gauge { display: flex; flex-direction: column; align-items: center; gap: 6px; }
 .gauge-arc-wrap { position: relative; }
 .gauge-value {
   position: absolute; left: 50%; transform: translate(-50%, -50%);
