@@ -168,10 +168,9 @@ body {
 }
 
 /* --- gauges (semicírculo) --- */
-.gauge { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 .gauge-arc-wrap { position: relative; }
 .gauge-value {
-  position: absolute; left: 50%; transform: translate(-50%, -50%);
   font-size: 1.6rem; font-weight: 800; color: var(--color-base-escura); white-space: nowrap;
 }
 .gauge-bounds { display: flex; justify-content: space-between; font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }

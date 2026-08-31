@@ -177,21 +177,18 @@
     arcWrap.className = "gauge-arc-wrap";
     arcWrap.style.width = size + "px";
     arcWrap.appendChild(svg);
+    container.appendChild(arcWrap);
 
     // Texto sempre em verde-escuro: verde-claro/roxo-destaque têm baixo
     // contraste como texto sobre fundo branco, então servem só para o arco.
-    // Sobreposto dentro do arco (na altura da linha de base/"pés" do
-    // semicírculo), como no BI original, em vez de ficar solto embaixo.
+    // Fica logo abaixo do arco (não sobreposto): com o texto comprido
+    // ("28,789 Ton"), não existe altura onde ele caiba dentro do miolo do
+    // arco sem tocar a ponta arredondada do traço — sobrepor sempre "pegava
+    // a barra" em algum ponto. Fica só bem colado, sem espaço sobrando.
     const value = document.createElement("div");
     value.className = "gauge-value";
-    // Um pouco acima da linha de base (pés do semicírculo): na própria
-    // linha de base o traço arredondado das pontas do arco desce até ali,
-    // e o número (principalmente com texto longo) acabava encostando nele.
-    value.style.top = (cy - 20) + "px";
     value.textContent = fmtTon(valor);
-    arcWrap.appendChild(value);
-
-    container.appendChild(arcWrap);
+    container.appendChild(value);
 
     // Mesma largura fixa do arco, pra "0,000 Ton" e a meta ficarem perto
     // das pontas do arco em vez de espalhados pela largura do painel.
