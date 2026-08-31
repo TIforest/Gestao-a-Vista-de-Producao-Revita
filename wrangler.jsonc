@@ -23,7 +23,7 @@
     {
       "binding": "DB",
       "database_name": "revita-producao-db",
-      "database_id": "881a0117-097b-4725-b6cd-d889b41cc47e",
+      "database_id": "f979c702-a1d3-4ef1-af03-2669ea79a003",
       "migrations_dir": "./migrations"
     }
   ],
