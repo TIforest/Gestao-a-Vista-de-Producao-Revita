@@ -7,11 +7,12 @@
   };
 
   const REFRESH_MS = 30_000; // o servidor checa o SharePoint a cada 1 min; o painel rebusca o dashboard a cada 30s.
-  // 1 min em vez de 5: enquanto o cron do servidor está travado por um bug
-  // da própria Cloudflare (ver SUPORTE_CLOUDFLARE.txt), o navegador que
-  // ficar com essa aba aberta (a TV) vira o mecanismo principal de
-  // atualização automática, não só uma redundância. Voltar pra 5 min depois
-  // que o suporte confirmar que o cron voltou a disparar sozinho.
+  // 1 min: enquanto o cron do servidor está travado por um bug da própria
+  // Cloudflare (ver SUPORTE_CLOUDFLARE.txt), o navegador que ficar com essa
+  // aba aberta (a TV) vira o mecanismo principal de atualização automática.
+  // Seguro rodar a cada 1 min mesmo assim: sem "force" (ver mais abaixo),
+  // quando o arquivo não mudou isso é só 1 checagem barata, não reescreve
+  // o banco à toa.
   const FORCE_SYNC_MS = 60_000;
 
   function fmtTon(valor) {
@@ -342,8 +343,9 @@
   // Força o servidor a checar o SharePoint na hora, além de recarregar a
   // tela — se essa parte falhar (rede lenta, SharePoint/D1 fora do ar),
   // ainda assim recarrega com o que já tiver no banco.
-  async function forcarSincronizacao() {
-    await fetchComTimeout("/api/sync", { method: "POST" }, 15000).catch((err) => console.warn("Forçar sync falhou:", err.message));
+  async function forcarSincronizacao(force) {
+    const path = force ? "/api/sync?force=1" : "/api/sync";
+    await fetchComTimeout(path, { method: "POST" }, 15000).catch((err) => console.warn("Forçar sync falhou:", err.message));
     await load();
   }
 
@@ -353,7 +355,7 @@
     const textoOriginal = btnRefresh.textContent;
     btnRefresh.textContent = "↻ Atualizando…";
     try {
-      await forcarSincronizacao();
+      await forcarSincronizacao(true);
     } finally {
       btnRefresh.disabled = false;
       btnRefresh.textContent = textoOriginal;
@@ -363,8 +365,9 @@
   load();
   setInterval(load, REFRESH_MS);
   // Redundância: mesmo com o cron do servidor rodando de 1 em 1 minuto,
-  // o navegador (que fica aberto o dia todo, numa TV) também força uma
+  // o navegador (que fica aberto o dia todo, numa TV) também checa uma
   // sincronização de tempos em tempos por conta própria — não depende só
-  // do cron do lado do servidor pra insistir quando algo falha.
-  setInterval(forcarSincronizacao, FORCE_SYNC_MS);
+  // do cron do lado do servidor pra insistir quando algo falha. Sem force
+  // (ver comentário do botão Atualizar): barato quando nada mudou.
+  setInterval(() => forcarSincronizacao(false), FORCE_SYNC_MS);
 })();

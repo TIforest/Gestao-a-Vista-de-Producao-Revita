@@ -284,14 +284,15 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
       }
     }
 
-    const stmts = chunk.map((row) =>
+    // Só grava as linhas genuinamente novas (mesmo grupo "novas" de cima) —
+    // gravar a janela inteira a cada sync (como fazia antes) reescreve
+    // centenas de linhas sem mudança nenhuma, e com o auto-sync rodando de
+    // 1 em 1 minuto isso sozinho quase estourou a cota de escrita do D1.
+    const stmts = novas.map((row) =>
       env.DB.prepare(
         `INSERT INTO apontamentos (row_hash, lote, cliente, numero_fardo, turma, peso_seco, data_hora, maquina, produto)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(row_hash) DO UPDATE SET
-           cliente = excluded.cliente,
-           peso_seco = excluded.peso_seco,
-           produto = excluded.produto`
+         ON CONFLICT(row_hash) DO NOTHING`
       ).bind(
         row.row_hash,
         row.lote,

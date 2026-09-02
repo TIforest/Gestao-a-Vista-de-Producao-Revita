@@ -32,11 +32,21 @@ export default {
         return json(payload);
       }
 
-      // Sem token: é só "forçar checagem agora", usado pelo botão Atualizar
-      // do painel (que qualquer um no chão de fábrica pode clicar). Upload
-      // manual e o /api/debug continuam protegidos, esse não precisa.
+      // Sem token: é só "checar agora", usado pelo botão Atualizar do painel
+      // (que qualquer um no chão de fábrica pode clicar) e pelo auto-sync
+      // periódico do navegador. Upload manual e o /api/debug continuam
+      // protegidos, esse não precisa.
+      //
+      // ?force=1 (só o clique manual do botão) pula a checagem barata de
+      // "o arquivo mudou desde a última vez?" e força reler mesmo sem
+      // mudança. O auto-sync periódico NÃO usa force: sem ele, quando nada
+      // mudou no SharePoint a checagem é barata (1 consulta ao Graph); com
+      // force sempre reescreveria as linhas da janela inteira no D1 a cada
+      // chamada, mesmo sem nada novo — foi isso que quase estourou a cota
+      // do banco quando o auto-sync passou a rodar de 1 em 1 minuto.
       if (pathname === "/api/sync" && request.method === "POST") {
-        const result = await runSync(env, { force: true });
+        const force = url.searchParams.get("force") === "1";
+        const result = await runSync(env, { force });
         return json(result);
       }
 
