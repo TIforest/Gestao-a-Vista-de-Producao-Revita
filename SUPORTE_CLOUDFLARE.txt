@@ -1,0 +1,37 @@
+Account ID: ecc2e58aa45d10954dccbf42fd4d45ee
+Worker name: revita-painel-producao
+Worker URL: revita-painel-producao.chamados-push.workers.dev
+
+Problem: Cron Trigger registered but scheduled() handler is never invoked.
+
+I created a Cron Trigger ("* * * * *", every minute) on this Worker. It shows
+correctly in the dashboard (Settings > Trigger Events), including a correctly
+computed "Next execution" time that updates every minute. However, the
+scheduled() handler is never actually called by the platform:
+
+- `wrangler tail` shows zero events over multiple 2-3 minute observation
+  windows, even though a cron invocation should log something every 60s.
+- The Metrics tab confirms 0 invocations beyond the HTTP requests I made
+  manually (curl/browser) — no scheduled-trigger invocations at all since
+  the Worker was first deployed (~2+ hours ago as of this report).
+- I deleted and recreated the Cron Trigger twice, both via `wrangler
+  triggers deploy` and via the dashboard UI directly. Neither fixed it —
+  the "next execution" keeps recalculating correctly, but it never
+  actually fires.
+- This Worker was just deployed to this account for the first time today;
+  this is the first-ever Cron Trigger created on this account. An
+  identical Worker (same code, different Cloudflare account) has an
+  identical Cron Trigger that has been firing reliably every minute for
+  weeks, so the Worker code itself is not the issue.
+
+This matches several other reports on the Community forum of Cron Triggers
+being registered/listed correctly but never dispatched, particularly for
+newly-created triggers, e.g.:
+- community.cloudflare.com/t/cron-triggers-configured-and-listed-by-schedules-but-never-fire-new-account-2026/922869
+- community.cloudflare.com/t/cron-trigger-registered-but-never-invoking-the-worker/953257
+- community.cloudflare.com/t/cron-triggers-stopped-dispatching-scheduled-since-20-june-14-00-utc/935555
+
+Could you please check the cron dispatcher registration for this Worker on
+this account and re-register it on your end? This Worker drives a
+production shop-floor dashboard that needs to sync automatically every
+minute with no manual intervention.

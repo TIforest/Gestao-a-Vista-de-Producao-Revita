@@ -15,15 +15,31 @@
   // o banco à toa.
   const FORCE_SYNC_MS = 60_000;
 
-  function fmtTon(valor) {
+  // Cores do BI original (mesmas do styles.css) — usadas só onde o SVG
+  // precisa delas em atributo.
+  const COR = {
+    verde: "#18c13b",
+    verdeTexto: "#2e9e3a",
+    azulArco: "#1f5fe6",
+    azulTexto: "#2b33d6",
+    trilho: "#e6e6e6",
+  };
+
+  // BI mostra sempre 3 casas: "33,222 Ton", "40,000 Ton".
+  function fmtTonNum(valor) {
     const ton = (valor || 0) / 1000; // peso_seco vem em kg — dividir por 1000 já dá toneladas
-    return (
-      ton.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 3 }) + " Ton"
-    );
+    return ton.toLocaleString("pt-BR", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
+  function fmtTon(valor) {
+    return fmtTonNum(valor) + " Ton";
   }
 
   function fmtKg(valor) {
     return (valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function fmtPct(p) {
+    return p.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + "%";
   }
 
   function fmtHora(isoDataHora) {
@@ -35,6 +51,13 @@
     "JANEIRO", "FEVEREIRO", "MARÇO", "ABRIL", "MAIO", "JUNHO",
     "JULHO", "AGOSTO", "SETEMBRO", "OUTUBRO", "NOVEMBRO", "DEZEMBRO",
   ];
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
 
   // Timeout pra nunca ficar "travado" sem feedback — se a rede/servidor
   // não responder em 12s, desiste e mostra erro em vez de ficar pendurado.
@@ -54,60 +77,51 @@
     return res.json();
   }
 
-  function renderHBarRow({ label, valor, meta, onClick, selected }) {
-    const row = document.createElement("div");
-    row.className = "hbar-row" + (onClick ? " clickable" : "") + (selected ? " selected" : "");
+  // ---------------------------------------------------------------------
+  // Barras em par (como no BI): produção em verde em cima, meta em azul
+  // embaixo, as duas na mesma escala dentro do gráfico. `escala` é o maior
+  // valor do gráfico (produção ou meta) — essa barra ocupa ~64% da largura,
+  // o resto fica pro rótulo à direita.
+  // ---------------------------------------------------------------------
+  const LARGURA_MAX_PCT = 64;
 
-    const labelEl = document.createElement("div");
-    labelEl.className = "hbar-row-label";
-    labelEl.textContent = label;
-    row.appendChild(labelEl);
+  function escalaDoGrafico(linhas) {
+    let max = 0;
+    for (const l of linhas) max = Math.max(max, l.valor || 0, l.meta || 0);
+    return max;
+  }
 
-    const track = document.createElement("div");
-    track.className = "hbar-track";
+  function linhaDeBarra(classe, valor, escala, italico, inside) {
+    const line = el("div", "pbar-line");
+    const fill = el("div", "pbar-fill " + classe);
+    const pct = escala > 0 ? Math.max(0, Math.min(100, ((valor || 0) / escala) * 100)) : 0;
+    fill.style.width = (pct * LARGURA_MAX_PCT) / 100 + "%";
+    const text = el("span", "pbar-text" + (italico ? " italic" : ""), fmtTon(valor));
+    line.appendChild(fill);
+    // No modo "inside" (gráfico de meta por hora) o rótulo vai dentro da
+    // barra, em branco; nos outros fica fora, à direita do preenchimento.
+    if (inside) fill.appendChild(text);
+    else line.appendChild(text);
+    return line;
+  }
 
-    const pct = meta > 0 ? Math.min(100, (valor / meta) * 100) : 0;
-    const fillValor = document.createElement("div");
-    fillValor.className = "hbar-fill-valor";
-    fillValor.style.width = pct + "%";
-    track.appendChild(fillValor);
+  function renderPairBar({ label, valor, meta, escala, italico, inside, onClick, selected }) {
+    const row = el("div", "pbar-row" + (onClick ? " clickable" : "") + (selected ? " selected" : ""));
+    row.appendChild(el("div", "pbar-label", label));
 
-    const badge = document.createElement("div");
-    badge.className = "hbar-value-badge";
-    badge.textContent = fmtTon(valor);
-    track.appendChild(badge);
-
-    row.appendChild(track);
-
-    const metaLabel = document.createElement("div");
-    metaLabel.className = "hbar-meta-label";
-    metaLabel.textContent = fmtTon(meta);
-    row.appendChild(metaLabel);
+    const bars = el("div", "pbar-bars");
+    bars.appendChild(linhaDeBarra("pbar-valor", valor, escala, italico, inside));
+    bars.appendChild(linhaDeBarra("pbar-meta", meta, escala, italico, inside));
+    row.appendChild(bars);
 
     if (onClick) row.addEventListener("click", onClick);
-
-    // Posiciona o rótulo do valor depois de estar no DOM: fora da barra
-    // (após o preenchimento) se couber sem invadir a meta ao lado; senão,
-    // para dentro da barra, encostado à direita do preenchimento.
-    requestAnimationFrame(() => {
-      const trackWidth = track.clientWidth;
-      if (!trackWidth) return;
-      const fillWidthPx = (pct / 100) * trackWidth;
-      const badgeWidth = badge.offsetWidth;
-      const GAP = 6;
-      if (fillWidthPx + GAP + badgeWidth <= trackWidth) {
-        badge.style.left = fillWidthPx + GAP + "px";
-      } else {
-        badge.style.left = Math.max(GAP, fillWidthPx - GAP - badgeWidth) + "px";
-      }
-      badge.style.visibility = "visible";
-    });
-
     return row;
   }
 
-  // Ponto na borda do semicírculo (topo do medidor). theta: 180° = esquerda
-  // (0%), 90° = topo (50%), 0° = direita (100%).
+  // ---------------------------------------------------------------------
+  // Gauge (semicírculo). Ponto na borda: theta 180° = esquerda (0%),
+  // 90° = topo (50%), 0° = direita (100%).
+  // ---------------------------------------------------------------------
   function pontoGauge(cx, cy, r, thetaDeg) {
     const rad = (thetaDeg * Math.PI) / 180;
     return { x: cx + r * Math.cos(rad), y: cy - r * Math.sin(rad) };
@@ -144,11 +158,14 @@
     return path;
   }
 
-  function renderGauge(container, valor, meta, color) {
+  // Como no BI: arco grande, traço grosso, sem ponta arredondada, número
+  // colorido dentro do arco (entre as duas pontas) e limites "0,000" /
+  // "40,000 Ton" em itálico logo abaixo, na mesma cor.
+  function renderGauge(container, valor, meta, corArco, corTexto) {
     container.innerHTML = "";
-    const size = 160;
-    const strokeWidth = 24; // traço mais grosso, pra barra parecer maior que o número embaixo
-    const pad = strokeWidth / 2 + 2; // >= metade do traço, senão a ponta arredondada corta
+    const size = 210;
+    const strokeWidth = 30;
+    const pad = strokeWidth / 2 + 2;
     const svgNS = "http://www.w3.org/2000/svg";
     const svg = document.createElementNS(svgNS, "svg");
 
@@ -157,15 +174,12 @@
     const cy = r + pad;
     const viewBoxHeight = cy + pad;
     svg.setAttribute("viewBox", `0 0 ${size} ${viewBoxHeight}`);
-    // largura fixa (não mais 100%) — assim o arco tem um tamanho de caixa
-    // conhecido, e o número/rótulos abaixo conseguem se alinhar exatamente
-    // com ele em vez de espalhar pela largura toda do painel.
     svg.setAttribute("width", size + "px");
-    svg.setAttribute("height", viewBoxHeight + "px"); // altura fixa — tamanho original, não estica com o painel
+    svg.setAttribute("height", viewBoxHeight + "px");
 
     const bg = criarArcoMedidor(svgNS, cx, cy, r, 1); // trilho sempre completo, 0% a 100%
     for (const path of bg.children) {
-      path.setAttribute("stroke", "#a6a6a6"); // cinza — trilho do gauge sempre visível, mesmo com valor 0
+      path.setAttribute("stroke", COR.trilho);
       path.setAttribute("stroke-width", String(strokeWidth));
     }
     svg.appendChild(bg);
@@ -173,78 +187,75 @@
     const pct = meta > 0 ? Math.min(1, valor / meta) : 0;
     const fg = criarArcoMedidor(svgNS, cx, cy, r, pct);
     for (const path of fg.children) {
-      path.setAttribute("stroke", color);
+      path.setAttribute("stroke", corArco);
       path.setAttribute("stroke-width", String(strokeWidth));
-      path.setAttribute("stroke-linecap", "round");
     }
     svg.appendChild(fg);
 
-    const arcWrap = document.createElement("div");
-    arcWrap.className = "gauge-arc-wrap";
+    const arcWrap = el("div", "gauge-arc-wrap");
     arcWrap.style.width = size + "px";
+    arcWrap.style.height = viewBoxHeight + "px";
     arcWrap.appendChild(svg);
+
+    const value = el("div", "gauge-value", fmtTonNum(valor));
+    value.style.color = corTexto;
+    arcWrap.appendChild(value);
     container.appendChild(arcWrap);
 
-    // Texto sempre em verde-escuro: verde-claro/roxo-destaque têm baixo
-    // contraste como texto sobre fundo branco, então servem só para o arco.
-    // Fica logo abaixo do arco (não sobreposto): com o texto comprido
-    // ("28,789 Ton"), não existe altura onde ele caiba dentro do miolo do
-    // arco sem tocar a ponta arredondada do traço — sobrepor sempre "pegava
-    // a barra" em algum ponto. Fica só bem colado, sem espaço sobrando.
-    const value = document.createElement("div");
-    value.className = "gauge-value";
-    value.textContent = fmtTon(valor);
-    container.appendChild(value);
-
-    // Mesma largura fixa do arco, pra "0,000 Ton" e a meta ficarem perto
-    // das pontas do arco em vez de espalhados pela largura do painel.
-    const bounds = document.createElement("div");
-    bounds.className = "gauge-bounds";
+    const bounds = el("div", "gauge-bounds");
     bounds.style.width = size + "px";
-    bounds.innerHTML = `<span>0,000 Ton</span><span>${fmtTon(meta)}</span>`;
+    bounds.style.color = corTexto;
+    bounds.innerHTML = `<span>0,000</span><span>${fmtTon(meta)}</span>`;
     container.appendChild(bounds);
   }
 
-  function renderMetaBar(container, pct) {
+  // ---------------------------------------------------------------------
+  // % da meta atingida: uma barra por turma (verde = atingido, vermelho =
+  // falta), com as linhas pontilhadas de 0% / 50% / 100% atrás, como no BI.
+  // ---------------------------------------------------------------------
+  function renderMetaChart(container, linhas) {
     container.innerHTML = "";
-    const real = Math.max(0, pct); // número exibido não tem teto — pode passar de 100%
-    const largura = Math.min(100, real); // a barra em si não estoura o quadro
-    const track = document.createElement("div");
-    track.className = "meta-bar-track";
+    const rows = el("div", "meta-rows");
+    for (const pos of [0, 50, 100]) {
+      const v = el("div", "meta-vline");
+      v.style.left = pos + "%";
+      rows.appendChild(v);
+    }
+    for (const l of linhas) {
+      const pct = l.meta > 0 ? (l.valor / l.meta) * 100 : 0;
+      const real = Math.max(0, pct); // número exibido não tem teto — pode passar de 100%
+      const largura = Math.min(100, real); // a barra em si não estoura o quadro
 
-    const atingido = document.createElement("div");
-    atingido.className = "meta-bar-atingido";
-    atingido.style.width = largura + "%";
-    atingido.textContent = real.toFixed(2).replace(".", ",") + "%";
-    track.appendChild(atingido);
+      const row = el("div", "meta-row");
+      row.appendChild(el("div", "meta-row-label", l.turma));
+      const track = el("div", "meta-track");
+      const atingido = el("div", "meta-atingido", fmtPct(real));
+      atingido.style.width = largura + "%";
+      track.appendChild(atingido);
+      const falta = el("div", "meta-falta", fmtPct(Math.max(0, 100 - real)));
+      if (largura >= 100) falta.style.display = "none";
+      track.appendChild(falta);
+      row.appendChild(track);
+      rows.appendChild(row);
+    }
+    container.appendChild(rows);
 
-    const falta = document.createElement("div");
-    falta.className = "meta-bar-falta";
-    falta.textContent = Math.max(0, 100 - real).toFixed(2).replace(".", ",") + "%";
-    track.appendChild(falta);
-
-    container.appendChild(track);
-
-    const ticks = document.createElement("div");
-    ticks.className = "meta-bar-ticks";
+    const ticks = el("div", "meta-ticks");
     ticks.innerHTML = "<span>0%</span><span>50%</span><span>100%</span>";
     container.appendChild(ticks);
   }
 
+  // Lista só as turmas que têm apontamento no dia (o servidor já manda
+  // assim — igual ao segmentador do BI). Sem turma selecionada, todas as
+  // caixas ficam verdes ("todas"); clicando numa, só ela fica verde;
+  // clicando de novo, volta pra todas.
   function renderTurmas(payload) {
     const list = document.getElementById("turmasList");
     list.innerHTML = "";
-
-    const todas = document.createElement("div");
-    todas.className = "turma-box todas" + (state.turma === null ? " active" : "");
-    todas.textContent = "TODAS";
-    todas.addEventListener("click", () => { state.turma = null; load(); });
-    list.appendChild(todas);
-
     for (const t of payload.turmasDisponiveis) {
-      const box = document.createElement("div");
-      box.className = "turma-box" + (state.turma === t ? " active" : "");
-      box.textContent = t;
+      const ativa = state.turma === null || state.turma === t;
+      const box = el("div", "turma-box" + (ativa ? " active" : ""), t);
+      box.title = state.turma === t ? "Clique pra voltar a mostrar todas as turmas" : "Mostrar só a turma " + t;
       box.addEventListener("click", () => { state.turma = state.turma === t ? null : t; load(); });
       list.appendChild(box);
     }
@@ -255,30 +266,34 @@
 
     document.getElementById("producaoMesValor").textContent = fmtTon(payload.producaoMes);
     const [y, m] = payload.data.split("-");
-    document.getElementById("mesLabel").textContent = `${MONTH_NAMES[Number(m) - 1]} ${y}`;
+    const mesLabel = document.getElementById("mesLabel");
+    mesLabel.textContent = MONTH_NAMES[Number(m) - 1];
+    mesLabel.title = `${MONTH_NAMES[Number(m) - 1]} ${y}`;
 
+    // Produção x turma: só as turmas ativas (ou a selecionada), cada uma
+    // contra a meta fixa do turno — tudo na mesma escala.
     const turmaChart = document.getElementById("producaoTurmaChart");
     turmaChart.innerHTML = "";
-    // Com só 1 turma filtrada sobra espaço vazio no resto do quadrado — centraliza
-    // a linha única verticalmente e dá um leve destaque nela.
-    turmaChart.classList.toggle("hbar-chart--single", !!state.turma);
     const linhasTurma = state.turma
       ? payload.producaoPorTurma.filter((r) => r.turma === state.turma)
       : payload.producaoPorTurma;
+    const escalaTurma = escalaDoGrafico(linhasTurma);
     for (const r of linhasTurma) {
       turmaChart.appendChild(
-        renderHBarRow({ label: r.turma, valor: r.valor, meta: r.meta, selected: !!state.turma })
+        renderPairBar({ label: r.turma, valor: r.valor, meta: r.meta, escala: escalaTurma, italico: true, selected: !!state.turma })
       );
     }
 
     const desaguadorasChart = document.getElementById("desaguadorasChart");
     desaguadorasChart.innerHTML = "";
+    const escalaDesag = escalaDoGrafico(payload.producaoPorDesaguadora);
     for (const r of payload.producaoPorDesaguadora) {
       desaguadorasChart.appendChild(
-        renderHBarRow({
+        renderPairBar({
           label: `DESAGUADORA ${r.maquina}`,
           valor: r.valor,
           meta: r.meta,
+          escala: escalaDesag,
           selected: state.maquina === r.maquina,
           onClick: () => { state.maquina = state.maquina === r.maquina ? null : r.maquina; load(); },
         })
@@ -288,12 +303,21 @@
     const horaChart = document.getElementById("horaChart");
     horaChart.innerHTML = "";
     horaChart.appendChild(
-      renderHBarRow({ label: state.turma || "TODAS", valor: payload.producaoMediaHora, meta: payload.metaHora })
+      renderPairBar({
+        label: state.turma || "TODAS",
+        valor: payload.producaoMediaHora,
+        meta: payload.metaHora,
+        escala: escalaDoGrafico([{ valor: payload.producaoMediaHora, meta: payload.metaHora }]),
+        inside: true,
+      })
     );
 
-    renderGauge(document.getElementById("gaugeTurno"), payload.producaoTurno, payload.metaTurno, "#c5f249");
-    renderGauge(document.getElementById("gaugeDia"), payload.producaoDia, payload.metaDia, "#c1b4ee");
-    renderMetaBar(document.getElementById("metaAtingidaChart"), payload.percentualMetaAtingida);
+    renderGauge(document.getElementById("gaugeTurno"), payload.producaoTurno, payload.metaTurno, COR.verde, COR.verdeTexto);
+    renderGauge(document.getElementById("gaugeDia"), payload.producaoDia, payload.metaDia, COR.azulArco, COR.azulTexto);
+
+    // % da meta: uma barra por turma ativa (ou só a selecionada), cada uma
+    // contra a meta do turno — como o eixo "TURMA" do BI.
+    renderMetaChart(document.getElementById("metaAtingidaChart"), linhasTurma);
 
     const tbody = document.querySelector("#tabelaApontamentos tbody");
     tbody.innerHTML = "";
@@ -332,6 +356,12 @@
     if (state.maquina) params.set("maquina", state.maquina);
     try {
       const payload = await apiGet("/api/dashboard?" + params.toString());
+      // A turma selecionada sumiu da lista (virou o dia, ou ela não tem mais
+      // apontamento): volta pra "todas" em vez de ficar numa tela zerada.
+      if (state.turma && !payload.turmasDisponiveis.includes(state.turma)) {
+        state.turma = null;
+        return load();
+      }
       render(payload);
     } catch (err) {
       console.error(err);

@@ -15,7 +15,8 @@ export interface Env {
 
   // Vars (wrangler.jsonc)
   DESAGUADORAS: string; // "01,02,03,04"
-  TURMAS: string; // "A,B,C,D,E"
+  TURMAS: string; // "A,B,C,D,E" — fallback quando o dia ainda não tem apontamento
+  TURNOS_POR_DIA?: string; // "2" — define a meta do dia (× meta do turno)
 }
 
 export interface Apontamento {

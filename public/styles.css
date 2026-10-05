@@ -1,29 +1,23 @@
 /* ======================================================================
-   PALETA OFICIAL FOREST (RGB fornecido pelo usuário, 2026-08-14).
-   Verde Claro e Roxo Destaque são tons claros/vibrantes: baixo contraste
-   como texto sobre fundo branco, então usamos os dois só como preenchimento
-   (barras, arcos, badges com fundo escuro) — o texto de leitura sempre usa
-   Verde Escuro, que tem alto contraste sobre branco.
+   VISUAL ALINHADO AO BI ORIGINAL (Power BI "Gestão a Vista de Produção"),
+   pedido em 2026-10-05: fundo branco, molduras pretas grossas entre os
+   quadros, verde vivo pra produção, azul-marinho pra meta, vermelho pra
+   "falta meta", título amarelo-esverdeado na barra preta.
    ====================================================================== */
 :root {
-  --forest-verde-claro: #c5f249;   /* R197 G242 B73 — produção / dado principal */
-  --forest-verde-escuro: #0a252a;  /* R10 G37 B42   — texto, header, UI escura */
-  --forest-bege-kraft: #a6a6a6;    /* cinza — neutro / "falta meta" (era bege kraft R177 G152 B115) */
-  --forest-roxo-destaque: #c1b4ee; /* R193 G180 B238 — meta / destaque */
-  --forest-white: #ffffff;
-
-  --color-dado: var(--forest-verde-claro);
-  --color-base-escura: var(--forest-verde-escuro);
-  --color-meta: var(--forest-roxo-destaque);
-  --color-neutro: var(--forest-bege-kraft);
-
-  --bg-page: #f4f5f3;
-  --bg-panel: #ffffff;
-  --border-color: #e2ded4;
-  --text-primary: var(--forest-verde-escuro);
-  --text-muted: #6b6459;
-  --radius: 10px;
-  --shadow: 0 1px 3px rgba(10, 37, 42, 0.1);
+  --bi-verde: #18c13b;        /* produção (barras, arco do turno, cabeçalho da tabela) */
+  --bi-verde-texto: #2e9e3a;  /* número dentro do gauge do turno */
+  --bi-azul: #1f2a9c;         /* meta (barras, texto do mês) */
+  --bi-azul-arco: #1f5fe6;    /* arco do gauge do dia */
+  --bi-azul-texto: #2b33d6;   /* número dentro do gauge do dia */
+  --bi-vermelho: #e8321f;     /* falta pra atingir a meta */
+  --bi-amarelo: #d4ff00;      /* título no topo */
+  --bi-preto: #000000;
+  --bi-cinza-arco: #e6e6e6;
+  --bi-cinza-linha: #ececec;
+  --bi-texto: #333333;
+  --bi-texto-suave: #666666;
+  --bi-branco: #ffffff;
 }
 
 * { box-sizing: border-box; }
@@ -31,183 +25,235 @@
 body {
   margin: 0;
   font-family: "Segoe UI", Arial, sans-serif;
-  background: var(--bg-page);
-  color: var(--text-primary);
+  background: var(--bi-branco);
+  color: var(--bi-texto);
 }
 
+/* --- barra do topo --- */
 .topbar {
   display: flex;
   align-items: center;
   gap: 16px;
-  background: var(--color-base-escura);
-  color: var(--forest-white);
-  padding: 10px 18px;
+  background: var(--bi-preto);
+  color: var(--bi-branco);
+  padding: 6px 18px;
+  min-height: 54px;
 }
-.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 1.25rem; }
-.brand-mark { color: var(--color-dado); font-size: 1.5rem; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 1.9rem; letter-spacing: -0.01em; }
+.brand-mark { color: var(--bi-verde); font-size: 2rem; line-height: 1; }
+.brand-name { color: var(--bi-branco); }
 .title {
   flex: 1;
   text-align: center;
-  color: var(--color-dado);
-  font-size: 1.4rem;
-  letter-spacing: 0.03em;
+  color: var(--bi-amarelo);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
   margin: 0;
 }
 .topbar-actions { display: flex; align-items: center; gap: 8px; }
-.sync-info { font-size: 0.75rem; color: #c9cfc7; margin-right: 6px; }
+.sync-info { font-size: 0.72rem; color: #b5b5b5; margin-right: 6px; }
 
 .btn {
   border: none;
-  border-radius: 6px;
-  padding: 8px 12px;
-  font-size: 0.85rem;
+  border-radius: 4px;
+  padding: 7px 12px;
+  font-size: 0.82rem;
   cursor: pointer;
 }
-.btn-ghost { background: transparent; color: var(--forest-white); border: 1px solid #33474c; }
-.btn-ghost:hover { border-color: var(--color-dado); }
+.btn-ghost { background: transparent; color: var(--bi-branco); border: 1px solid #555; }
+.btn-ghost:hover { border-color: var(--bi-amarelo); color: var(--bi-amarelo); }
 
+/* --- grade: fundo preto + gap vira a moldura preta grossa do BI --- */
 .grid {
   display: grid;
-  grid-template-columns: 150px 1.1fr 1fr 1.3fr;
+  grid-template-columns: 100px 1fr 1fr 1.5fr;
   grid-template-areas:
     "turmas producaoTurma mes desaguadoras"
     "turmas producaoTurma hora desaguadoras"
     "turmas turno dia metaAtingida"
-    "tabela tabela tabela tabela";
-  gap: 12px;
-  padding: 12px;
+    "turmas tabela tabela tabela";
+  gap: 4px;
+  padding: 4px;
+  background: var(--bi-preto);
+  /* Ocupa exatamente a altura que sobra abaixo do topo: a TV mostra tudo
+     sem rolagem, e só a tabela (última linha da grade) rola por dentro. */
+  height: calc(100vh - 54px);
+  grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
 .panel {
-  background: var(--bg-panel);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 12px 14px;
+  background: var(--bi-branco);
+  padding: 8px 12px 10px;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
 }
-.panel-title {
-  font-weight: 700;
-  font-size: 0.85rem;
-  letter-spacing: 0.02em;
-  margin-bottom: 10px;
-  color: var(--text-primary);
+.panel-title, .panel-label {
+  font-weight: 800;
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--bi-texto);
+  margin-bottom: 8px;
 }
 
-.turmas-panel { grid-area: turmas; display: flex; flex-direction: column; }
-.panel-label { font-weight: 700; font-size: 0.85rem; margin-bottom: 10px; }
-.turmas-list { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+/* --- turmas (coluna da esquerda, caixas verdes que preenchem a altura) --- */
+.turmas-panel { grid-area: turmas; padding: 8px 6px 10px; }
+.turmas-list { display: flex; flex-direction: column; gap: 8px; flex: 1; }
 .turma-box {
-  border: 2px solid var(--color-dado);
-  border-radius: 8px;
+  flex: 1;
   min-height: 56px;
+  border: 2px solid var(--bi-verde);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-weight: 700;
-  font-size: 1.1rem;
-  color: var(--color-base-escura);
-  background: var(--forest-white);
+  font-weight: 800;
+  font-size: 1.3rem;
+  color: var(--bi-verde);
+  background: var(--bi-branco);
   cursor: pointer;
   transition: background 0.15s, color 0.15s;
 }
-.turma-box:hover { background: #f2fbdd; }
-.turma-box.active {
-  background: var(--color-dado);
-  color: var(--color-base-escura);
-  border-color: var(--color-base-escura);
-}
-.turma-box.todas { font-size: 0.85rem; }
+.turma-box:hover { background: #e9fbe9; }
+.turma-box.active { background: var(--bi-verde); color: var(--bi-branco); }
 
-.producao-turma-panel { grid-area: producaoTurma; }
-.mes-panel { grid-area: mes; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.producao-turma-panel { grid-area: producaoTurma; min-height: 280px; }
+.mes-panel { grid-area: mes; align-items: center; justify-content: flex-start; text-align: center; }
 .desaguadoras-panel { grid-area: desaguadoras; }
-.hora-panel { grid-area: hora; }
+.hora-panel { grid-area: hora; min-height: 150px; }
 .turno-panel { grid-area: turno; }
 .dia-panel { grid-area: dia; }
 .meta-atingida-panel { grid-area: metaAtingida; }
-.tabela-panel { grid-area: tabela; }
+.tabela-panel { grid-area: tabela; min-height: 0; padding-top: 6px; }
 
-.big-number { font-size: 2rem; font-weight: 800; color: var(--color-base-escura); }
+/* --- produção acumulada do mês --- */
+.mes-box {
+  width: 100%;
+  max-width: 320px;
+  border: 2px solid #c9cbe8;
+  border-radius: 4px;
+  overflow: hidden;
+  margin: 4px auto 0;
+  box-shadow: 0 0 0 3px #eef0fb;
+}
+.big-number {
+  font-size: 2.1rem;
+  font-weight: 800;
+  color: var(--bi-azul);
+  padding: 12px 8px;
+  white-space: nowrap;
+}
 .month-pill {
-  margin-top: 8px;
-  background: var(--color-base-escura);
-  color: var(--color-dado);
-  border-radius: 999px;
-  padding: 4px 16px;
-  font-weight: 700;
-  font-size: 0.8rem;
+  background: var(--bi-azul);
+  color: var(--bi-branco);
+  padding: 5px 12px;
+  font-weight: 800;
+  font-size: 0.95rem;
   text-transform: uppercase;
 }
 
-/* --- barras horizontais (produção vs meta) --- */
-.hbar-chart { display: flex; flex-direction: column; gap: 16px; }
-.hbar-chart--single { justify-content: center; height: 100%; }
-.hbar-chart--tall { gap: 18px; }
-.hbar-row { display: flex; align-items: center; gap: 8px; }
-.hbar-row-label { width: 90px; font-size: 0.8rem; font-weight: 700; flex-shrink: 0; cursor: default; color: var(--text-primary); }
-.hbar-row.clickable { cursor: pointer; }
-.hbar-row.clickable .hbar-row-label { cursor: pointer; }
-.hbar-row.selected .hbar-track { outline: 2px solid var(--color-base-escura); outline-offset: 2px; border-radius: 4px; }
-.hbar-track { position: relative; flex: 1; height: 28px; background: #eef0eb; border-radius: 4px; overflow: visible; }
-.hbar-fill-meta { position: absolute; inset: 0; background: var(--color-meta); border-radius: 4px; opacity: 0.35; }
-.hbar-fill-valor {
-  position: absolute; inset: 0; background: var(--color-dado); border-radius: 4px;
-  transition: width 0.3s ease;
+/* --- gráficos de barras em par (produção verde sobre meta azul) --- */
+.pbar-chart { display: flex; flex-direction: column; justify-content: center; gap: 22px; flex: 1; padding: 6px 0; }
+.pbar-chart--tall { gap: 20px; }
+.pbar-row { display: flex; align-items: center; gap: 10px; }
+.pbar-row.clickable { cursor: pointer; }
+.pbar-label {
+  width: 64px;
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  color: var(--bi-texto);
+  text-align: right;
 }
-.hbar-value-badge {
-  position: absolute; top: 50%; transform: translateY(-50%);
-  color: var(--color-base-escura);
-  font-size: 0.72rem; font-weight: 700;
-  white-space: nowrap;
-  visibility: hidden; /* evita "pulo" visível antes do JS calcular a posição */
-}
-.hbar-meta-label {
-  font-size: 0.72rem; font-weight: 700; color: var(--color-base-escura);
-  background: var(--color-meta); padding: 2px 8px; border-radius: 999px;
-  margin-left: 8px; white-space: nowrap;
-}
+.pbar-chart--wide .pbar-label { width: 130px; }
+.pbar-bars { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; overflow: hidden; }
+.pbar-line { display: flex; align-items: center; gap: 8px; height: 26px; }
+.pbar-fill { height: 100%; flex-shrink: 0; transition: width 0.3s ease; }
+.pbar-valor { background: var(--bi-verde); }
+.pbar-meta { background: var(--bi-azul); }
+.pbar-text { font-weight: 800; font-size: 0.92rem; color: var(--bi-texto); white-space: nowrap; }
+.pbar-text.italic { font-style: italic; }
+/* rótulo dentro da barra (gráfico de meta por hora, como no BI) */
+.pbar-chart--inside .pbar-fill { min-width: max-content; display: flex; align-items: center; justify-content: flex-end; padding: 0 8px; }
+.pbar-chart--inside .pbar-text { color: var(--bi-branco); }
 
-/* --- gauges (semicírculo) --- */
-.gauge { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+/* --- gauges (semicírculo com número dentro do arco) --- */
+.gauge { display: flex; flex-direction: column; align-items: center; gap: 0; flex: 1; justify-content: center; }
 .gauge-arc-wrap { position: relative; }
+.gauge-arc-wrap svg { display: block; }
 .gauge-value {
-  font-size: 1.6rem; font-weight: 800; color: var(--color-base-escura); white-space: nowrap;
+  position: absolute;
+  left: 0; right: 0; bottom: 2px;
+  text-align: center;
+  font-size: 2.2rem;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
 }
-.gauge-bounds { display: flex; justify-content: space-between; font-size: 0.72rem; font-weight: 700; color: var(--text-muted); }
+.gauge-bounds {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  font-weight: 800;
+  font-style: italic;
+  margin-top: 4px;
+}
 
-/* --- barra % meta atingida --- */
-.meta-bar { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
-.meta-bar-track {
-  position: relative; height: 26px; border-radius: 4px; overflow: hidden;
-  display: flex; background: var(--color-neutro);
+/* --- % da meta atingida (uma barra por turma, verde + vermelho) --- */
+.meta-chart { display: flex; flex-direction: column; flex: 1; justify-content: center; padding: 10px 0 0; }
+.meta-rows { position: relative; display: flex; flex-direction: column; gap: 14px; margin-left: 34px; padding: 14px 0; }
+.meta-vline {
+  position: absolute; top: 0; bottom: 0; width: 0;
+  border-left: 2px dotted var(--bi-texto);
+  pointer-events: none;
 }
-.meta-bar-atingido {
-  background: var(--color-base-escura);
+.meta-row { position: relative; display: flex; align-items: center; }
+.meta-row-label {
+  position: absolute; left: -34px; width: 30px;
+  font-weight: 800; font-size: 0.95rem; text-align: center; text-transform: uppercase;
+}
+.meta-track { position: relative; flex: 1; height: 34px; display: flex; overflow: hidden; }
+.meta-atingido {
+  background: var(--bi-verde);
   display: flex; align-items: center; justify-content: center;
-  color: var(--color-dado); font-weight: 700; font-size: 0.75rem;
+  color: var(--bi-branco); font-weight: 800; font-size: 0.92rem;
+  white-space: nowrap; overflow: hidden;
 }
-.meta-bar-falta { flex: 1; display: flex; align-items: center; justify-content: center; color: var(--color-base-escura); font-weight: 700; font-size: 0.75rem; }
-.meta-bar-ticks { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--text-muted); }
+.meta-falta {
+  flex: 1;
+  background: var(--bi-vermelho);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--bi-branco); font-weight: 800; font-size: 0.92rem;
+  white-space: nowrap; overflow: hidden;
+}
+.meta-ticks { display: flex; justify-content: space-between; margin-left: 34px; font-size: 0.85rem; font-weight: 800; color: var(--bi-texto); }
 
 /* --- tabela --- */
-.table-wrap { overflow-x: auto; }
-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.table-wrap { overflow: auto; flex: 1; min-height: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 thead th {
-  background: var(--color-base-escura); color: var(--forest-white);
-  text-align: left; padding: 8px 10px; position: sticky; top: 0;
+  background: var(--bi-verde); color: var(--bi-branco);
+  text-align: center; padding: 8px 10px; position: sticky; top: 0;
+  font-weight: 800;
 }
-tbody td { padding: 7px 10px; border-bottom: 1px solid var(--border-color); }
-tbody tr:nth-child(even) { background: #faf9f5; }
+tbody td { padding: 6px 10px; text-align: center; border-bottom: 1px solid var(--bi-cinza-linha); color: var(--bi-texto); }
+tbody tr:nth-child(even) { background: #f0f0f0; }
 
-.legend { display: flex; gap: 16px; margin-top: 8px; font-size: 0.72rem; color: var(--text-muted); }
-.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
-.dot-green { background: var(--color-dado); }
-.dot-blue { background: var(--color-meta); }
-.dot-red { background: var(--color-neutro); }
+/* --- legendas --- */
+.legend { display: flex; flex-wrap: wrap; justify-content: center; gap: 14px; margin-top: 8px; font-size: 0.8rem; color: var(--bi-texto-suave); }
+.dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; border: 1px solid #222; }
+.dot-green { background: var(--bi-verde); }
+.dot-blue { background: var(--bi-azul); }
+.dot-red { background: var(--bi-vermelho); }
 
 @media (max-width: 900px) {
   .grid {
+    height: auto;
+    min-height: calc(100vh - 54px);
     grid-template-columns: 1fr;
+    grid-template-rows: none;
     grid-template-areas:
       "turmas"
       "mes"
@@ -220,18 +266,16 @@ tbody tr:nth-child(even) { background: #faf9f5; }
       "tabela";
   }
   .turmas-list { flex-direction: row; flex-wrap: wrap; }
-  .turma-box { flex: 1 1 60px; min-height: 48px; } /* alvo de toque maior que os 44px do desktop */
+  .turma-box { flex: 1 1 60px; min-height: 48px; }
 
-  /* Cabeçalho não cabe numa linha só em tela de celular — quebra em 3 linhas
-     (marca+botão, título, status da sincronização) em vez de espremer tudo. */
   .topbar { flex-wrap: wrap; row-gap: 6px; padding: 10px 14px; }
   .title { order: 3; flex: 1 1 100%; font-size: 1.15rem; }
   .sync-info { order: 4; flex: 1 1 100%; margin: 0; white-space: normal; }
   .topbar-actions { margin-left: auto; }
-  .btn { padding: 10px 14px; font-size: 0.9rem; } /* alvo de toque melhor no celular */
+  .btn { padding: 10px 14px; font-size: 0.9rem; }
 
-  /* Rótulo da barra mais estreito, senão sobra pouco espaço pra barra em si
-     numa tela de ~360-400px de largura. */
-  .hbar-row-label { width: 74px; font-size: 0.74rem; }
-  .hbar-meta-label { font-size: 0.68rem; padding: 2px 7px; }
+  .pbar-label, .pbar-chart--wide .pbar-label { width: 70px; font-size: 0.78rem; }
+  .pbar-text { font-size: 0.8rem; }
+  .producao-turma-panel { min-height: 0; }
+  .table-wrap { max-height: 60vh; }
 }

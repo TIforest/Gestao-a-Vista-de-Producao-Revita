@@ -37,7 +37,12 @@
 
   "vars": {
     "DESAGUADORAS": "01,02,03,04",
-    "TURMAS": "A,B,C,D,E"
+    // Lista completa de turmas, usada só como fallback quando o dia ainda
+    // não tem nenhum apontamento — o painel lista as turmas que têm dado.
+    "TURMAS": "A,B,C,D,E",
+    // Turnos que operam por dia: meta do dia = TURNOS_POR_DIA × 40.000.
+    // 2026-10-05: só as turmas A e B operam → 2 turnos → 80.000 (igual ao BI).
+    "TURNOS_POR_DIA": "2"
   }
 
   // "limits": { "cpu_ms": ... } fica de fora de propósito: o plano Free

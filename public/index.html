@@ -12,7 +12,7 @@
       <span class="brand-mark" aria-hidden="true">♻</span>
       <span class="brand-name">Revita</span>
     </div>
-    <h1 class="title">GESTÃO À VISTA DE PRODUÇÃO</h1>
+    <h1 class="title">GESTÃO A VISTA DE PRODUÇÃO</h1>
     <span id="syncInfo" class="sync-info">—</span>
     <div class="topbar-actions">
       <button id="btnRefresh" class="btn btn-ghost" title="Atualizar dados agora">↻ Atualizar</button>
@@ -21,64 +21,65 @@
 
   <main class="grid">
     <aside class="panel turmas-panel">
-      <div class="panel-label">TURMAS</div>
+      <div class="panel-label">Turmas</div>
       <div id="turmasList" class="turmas-list"></div>
     </aside>
 
     <section class="panel producao-turma-panel">
-      <div class="panel-title">PRODUÇÃO X TURMA</div>
-      <div id="producaoTurmaChart" class="hbar-chart"></div>
+      <div class="panel-title">Produção x Turma</div>
+      <div id="producaoTurmaChart" class="pbar-chart"></div>
       <div class="legend">
-        <span><i class="dot dot-green"></i>Soma de Peso Seco 51%</span>
-        <span><i class="dot dot-blue"></i>Meta do turno</span>
+        <span><i class="dot dot-green"></i>Produção Ton</span>
+        <span><i class="dot dot-blue"></i>Meta do Dia Ton</span>
       </div>
     </section>
 
     <section class="panel mes-panel">
-      <div class="panel-title">PRODUÇÃO ACUMULADA DO MÊS</div>
-      <div id="producaoMesValor" class="big-number">—</div>
-      <div id="mesLabel" class="month-pill">—</div>
+      <div class="panel-title">Produção Acumulada do Mês</div>
+      <div class="mes-box">
+        <div id="producaoMesValor" class="big-number">—</div>
+        <div id="mesLabel" class="month-pill">—</div>
+      </div>
     </section>
 
     <section class="panel desaguadoras-panel">
-      <div class="panel-title">PRODUÇÃO X DESAGUADORAS</div>
-      <div id="desaguadorasChart" class="hbar-chart hbar-chart--tall"></div>
+      <div class="panel-title">Produção x Desaguadoras</div>
+      <div id="desaguadorasChart" class="pbar-chart pbar-chart--tall pbar-chart--wide"></div>
       <div class="legend">
-        <span><i class="dot dot-green"></i>Soma de Peso Seco 51%</span>
-        <span><i class="dot dot-blue"></i>Meta Produção</span>
+        <span><i class="dot dot-green"></i>Produção Ton</span>
+        <span><i class="dot dot-blue"></i>Meta Produção Ton</span>
       </div>
     </section>
 
     <section class="panel hora-panel">
-      <div class="panel-title">META DE PRODUÇÃO X HORA</div>
-      <div id="horaChart" class="hbar-chart hbar-chart--single"></div>
+      <div class="panel-title">Meta de Produção x Hora</div>
+      <div id="horaChart" class="pbar-chart pbar-chart--inside"></div>
       <div class="legend">
-        <span><i class="dot dot-green"></i>Produção Média por Hora</span>
-        <span><i class="dot dot-blue"></i>Meta por Hora</span>
+        <span><i class="dot dot-green"></i>Produção Média por Hora Ton</span>
+        <span><i class="dot dot-blue"></i>Meta por Hora Ton</span>
       </div>
     </section>
 
     <section class="panel turno-panel">
-      <div class="panel-title">PRODUÇÃO TOTAL DO TURNO</div>
+      <div class="panel-title">Produção Total do Turno</div>
       <div id="gaugeTurno" class="gauge"></div>
     </section>
 
     <section class="panel dia-panel">
-      <div class="panel-title">PRODUÇÃO TOTAL DO DIA</div>
+      <div class="panel-title">Produção Total do Dia</div>
       <div id="gaugeDia" class="gauge"></div>
     </section>
 
     <section class="panel meta-atingida-panel">
-      <div class="panel-title">% DA META ATINGIDA</div>
-      <div id="metaAtingidaChart" class="meta-bar"></div>
+      <div class="panel-title">% da Meta Atingida</div>
+      <div id="metaAtingidaChart" class="meta-chart"></div>
       <div class="legend">
-        <span><i class="dot dot-green"></i>Produção do Turno</span>
-        <span><i class="dot dot-red"></i>Falta Meta</span>
+        <span><i class="dot dot-green"></i>PRODUÇÃO ATINGIDA</span>
+        <span><i class="dot dot-red"></i>FALTA PARA ATINGIR A META</span>
       </div>
     </section>
 
     <section class="panel tabela-panel">
-      <div class="panel-title">ÚLTIMOS APONTAMENTOS</div>
       <div class="table-wrap">
         <table id="tabelaApontamentos">
           <thead>

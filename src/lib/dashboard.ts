@@ -1,6 +1,6 @@
 import type { Env } from "../types";
 import { dayBoundsLocal, todayBrazilISODate } from "./date";
-import { META_TURNO, META_DIA, META_HORA, getMetaPorDesaguadora } from "./metasFixas";
+import { META_TURNO, META_HORA, TURNOS_POR_DIA_PADRAO, getMetaDia, getMetaPorDesaguadora } from "./metasFixas";
 
 /**
  * Produção média por hora, replicando a fórmula DAX do BI original: acha a
@@ -34,8 +34,9 @@ export interface DashboardFilters {
 export interface DashboardPayload {
   data: string;
   filtros: { turma: string | null; maquina: string | null };
-  turmasDisponiveis: string[];
+  turmasDisponiveis: string[]; // só as turmas com apontamento no dia (como o segmentador do BI)
   desaguadorasDisponiveis: string[];
+  turnosPorDia: number;
   producaoMes: number;
   producaoDia: number;
   metaDia: number;
@@ -67,13 +68,33 @@ export interface DashboardPayload {
 export async function buildDashboardPayload(env: Env, filters: DashboardFilters): Promise<DashboardPayload> {
   const dateISO = filters.date ?? todayBrazilISODate();
   const yearMonth = dateISO.slice(0, 7);
-  const turmasDisponiveis = env.TURMAS.split(",").map((s) => s.trim()).filter(Boolean);
+  const turmasConfiguradas = env.TURMAS.split(",").map((s) => s.trim()).filter(Boolean);
   const desaguadorasDisponiveis = env.DESAGUADORAS.split(",").map((s) => s.trim()).filter(Boolean);
 
-  const turma = filters.turma && turmasDisponiveis.includes(filters.turma) ? filters.turma : null;
-  const maquina = filters.maquina && desaguadorasDisponiveis.includes(filters.maquina) ? filters.maquina : null;
+  // Quantos turnos operam por dia (define a meta do dia). Vem da var
+  // TURNOS_POR_DIA do wrangler.jsonc; hoje são 2 (turmas A e B).
+  const turnosPorDia = Math.max(1, Number.parseInt(env.TURNOS_POR_DIA ?? "", 10) || TURNOS_POR_DIA_PADRAO);
+  const metaDia = getMetaDia(turnosPorDia);
 
   const { start: dayStart, end: dayEnd } = dayBoundsLocal(dateISO);
+
+  // Turmas "disponíveis" = as que têm apontamento no dia, como o
+  // segmentador do BI original — não a lista fixa A..E, que enchia a tela
+  // de linhas zeradas quando só 2 turmas operam. A lista fixa (TURMAS) fica
+  // só como fallback pra dia sem nenhum dado ainda.
+  const turmasAtivasRows = await env.DB.prepare(
+    "SELECT DISTINCT turma FROM apontamentos WHERE data_hora >= ? AND data_hora < ? AND turma <> '' ORDER BY turma"
+  )
+    .bind(dayStart, dayEnd)
+    .all<{ turma: string }>();
+  const turmasAtivas = turmasAtivasRows.results.map((r) => r.turma);
+  const turmasDisponiveis = turmasAtivas.length > 0 ? turmasAtivas : turmasConfiguradas;
+
+  const turma =
+    filters.turma && (turmasDisponiveis.includes(filters.turma) || turmasConfiguradas.includes(filters.turma))
+      ? filters.turma
+      : null;
+  const maquina = filters.maquina && desaguadorasDisponiveis.includes(filters.maquina) ? filters.maquina : null;
 
   // Vem do contador incremental (producao_mensal), não de SUM sobre
   // apontamentos — a tabela de apontamentos só guarda uma janela recente
@@ -147,7 +168,7 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
   const ultimosRows = await env.DB.prepare(
     `SELECT lote, cliente, numero_fardo, turma, peso_seco, data_hora, maquina, produto
      FROM apontamentos WHERE ${ultimosConds.join(" AND ")}
-     ORDER BY data_hora DESC LIMIT 5`
+     ORDER BY data_hora DESC LIMIT 10`
   )
     .bind(...ultimosArgs)
     .all();
@@ -158,7 +179,7 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
 
   // Sem turma selecionada ("Todas"), o recorte "turno" vira o total do dia
   // inteiro — então compara com a meta do dia, não a de um turno só.
-  const metaTurnoAlvo = turma ? META_TURNO : META_DIA;
+  const metaTurnoAlvo = turma ? META_TURNO : metaDia;
   const producaoTurno = producaoTurnoRow?.total ?? 0;
 
   return {
@@ -166,9 +187,10 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
     filtros: { turma, maquina },
     turmasDisponiveis,
     desaguadorasDisponiveis,
+    turnosPorDia,
     producaoMes: producaoMesRow?.total ?? 0,
     producaoDia: producaoDiaRow?.total ?? 0,
-    metaDia: META_DIA,
+    metaDia,
     producaoTurno,
     metaTurno: metaTurnoAlvo,
     producaoMediaHora: producaoMediaHora(producaoTurno, janelaHoraRow?.primeiro ?? null, janelaHoraRow?.ultimo ?? null),
