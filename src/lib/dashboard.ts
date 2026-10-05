@@ -26,7 +26,7 @@ function producaoMediaHora(producaoTurno: number, primeiroISO: string | null, ul
 }
 
 export interface DashboardFilters {
-  turma?: string;
+  turma?: string; // letra da turma, ou "auto" = turma do último apontamento do dia
   maquina?: string;
   date?: string; // YYYY-MM-DD, default hoje
 }
@@ -34,6 +34,10 @@ export interface DashboardFilters {
 export interface DashboardPayload {
   data: string;
   filtros: { turma: string | null; maquina: string | null };
+  // Turma do apontamento mais recente do dia — é a turma "em operação".
+  // O painel da TV usa isso pra se virar sozinho pra turma certa assim que
+  // entra o primeiro apontamento dela (sem ninguém clicar).
+  turmaAtual: string | null;
   turmasDisponiveis: string[]; // só as turmas com apontamento no dia (como o segmentador do BI)
   desaguadorasDisponiveis: string[];
   turnosPorDia: number;
@@ -90,9 +94,19 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
   const turmasAtivas = turmasAtivasRows.results.map((r) => r.turma);
   const turmasDisponiveis = turmasAtivas.length > 0 ? turmasAtivas : turmasConfiguradas;
 
+  const turmaAtualRow = await env.DB.prepare(
+    "SELECT turma FROM apontamentos WHERE data_hora >= ? AND data_hora < ? AND turma <> '' ORDER BY data_hora DESC, id DESC LIMIT 1"
+  )
+    .bind(dayStart, dayEnd)
+    .first<{ turma: string }>();
+  const turmaAtual = turmaAtualRow?.turma ?? null;
+
+  // "auto" = segue a turma em operação (último apontamento). Sem apontamento
+  // no dia ainda, fica sem filtro (todas) até a primeira turma lançar.
+  const turmaPedida = filters.turma === "auto" ? turmaAtual : filters.turma;
   const turma =
-    filters.turma && (turmasDisponiveis.includes(filters.turma) || turmasConfiguradas.includes(filters.turma))
-      ? filters.turma
+    turmaPedida && (turmasDisponiveis.includes(turmaPedida) || turmasConfiguradas.includes(turmaPedida))
+      ? turmaPedida
       : null;
   const maquina = filters.maquina && desaguadorasDisponiveis.includes(filters.maquina) ? filters.maquina : null;
 
@@ -185,6 +199,7 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
   return {
     data: dateISO,
     filtros: { turma, maquina },
+    turmaAtual,
     turmasDisponiveis,
     desaguadorasDisponiveis,
     turnosPorDia,

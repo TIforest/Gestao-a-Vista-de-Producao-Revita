@@ -1,10 +1,21 @@
 (() => {
   "use strict";
 
+  // turma = null → modo AUTOMÁTICO: o painel segue a turma do último
+  // apontamento do dia (o servidor resolve "auto"). Clicar numa turma
+  // trava nela por PIN_MS; depois volta ao automático sozinho — o painel
+  // fica numa TV sem ninguém pra desfazer um clique.
   const state = {
     turma: null,
+    pinAte: 0,
     maquina: null,
   };
+  const PIN_MS = 10 * 60_000;
+
+  function turmaPedida() {
+    if (state.turma && Date.now() > state.pinAte) state.turma = null; // trava manual venceu
+    return state.turma || "auto";
+  }
 
   const REFRESH_MS = 30_000; // o servidor checa o SharePoint a cada 1 min; o painel rebusca o dashboard a cada 30s.
   // 1 min: enquanto o cron do servidor está travado por um bug da própria
@@ -246,18 +257,38 @@
   }
 
   // Lista só as turmas que têm apontamento no dia (o servidor já manda
-  // assim — igual ao segmentador do BI). Sem turma selecionada, todas as
-  // caixas ficam verdes ("todas"); clicando numa, só ela fica verde;
-  // clicando de novo, volta pra todas.
+  // assim — igual ao segmentador do BI). A turma em operação (filtros.turma,
+  // resolvida pelo servidor no modo automático) fica verde. Clicar em outra
+  // trava nela por 10 min; clicar na travada volta pro automático.
   function renderTurmas(payload) {
     const list = document.getElementById("turmasList");
     list.innerHTML = "";
+    const emOperacao = payload.filtros.turma;
     for (const t of payload.turmasDisponiveis) {
-      const ativa = state.turma === null || state.turma === t;
+      const ativa = emOperacao === null || emOperacao === t;
       const box = el("div", "turma-box" + (ativa ? " active" : ""), t);
-      box.title = state.turma === t ? "Clique pra voltar a mostrar todas as turmas" : "Mostrar só a turma " + t;
-      box.addEventListener("click", () => { state.turma = state.turma === t ? null : t; load(); });
+      box.title = state.turma === t
+        ? "Travada manualmente — clique pra voltar ao automático"
+        : "Mostrar a turma " + t + " por 10 minutos (depois volta ao automático)";
+      box.addEventListener("click", () => {
+        if (state.turma === t) {
+          state.turma = null;
+        } else {
+          state.turma = t;
+          state.pinAte = Date.now() + PIN_MS;
+        }
+        load();
+      });
       list.appendChild(box);
+    }
+    const modo = document.getElementById("turmasModo");
+    if (state.turma) {
+      const min = Math.max(1, Math.ceil((state.pinAte - Date.now()) / 60_000));
+      modo.textContent = "manual · " + min + " min";
+      modo.className = "turmas-modo manual";
+    } else {
+      modo.textContent = "automático";
+      modo.className = "turmas-modo";
     }
   }
 
@@ -270,17 +301,18 @@
     mesLabel.textContent = MONTH_NAMES[Number(m) - 1];
     mesLabel.title = `${MONTH_NAMES[Number(m) - 1]} ${y}`;
 
-    // Produção x turma: só as turmas ativas (ou a selecionada), cada uma
-    // contra a meta fixa do turno — tudo na mesma escala.
+    // Produção x turma: todas as turmas que operaram no dia (a que está em
+    // operação fica destacada), cada uma contra a meta fixa do turno —
+    // tudo na mesma escala. Não filtra: a turma anterior continua visível
+    // pra comparação, como no BI quando as duas já lançaram.
+    const turmaEmOperacao = payload.filtros.turma;
     const turmaChart = document.getElementById("producaoTurmaChart");
     turmaChart.innerHTML = "";
-    const linhasTurma = state.turma
-      ? payload.producaoPorTurma.filter((r) => r.turma === state.turma)
-      : payload.producaoPorTurma;
+    const linhasTurma = payload.producaoPorTurma;
     const escalaTurma = escalaDoGrafico(linhasTurma);
     for (const r of linhasTurma) {
       turmaChart.appendChild(
-        renderPairBar({ label: r.turma, valor: r.valor, meta: r.meta, escala: escalaTurma, italico: true, selected: !!state.turma })
+        renderPairBar({ label: r.turma, valor: r.valor, meta: r.meta, escala: escalaTurma, italico: true, selected: turmaEmOperacao === r.turma })
       );
     }
 
@@ -304,7 +336,7 @@
     horaChart.innerHTML = "";
     horaChart.appendChild(
       renderPairBar({
-        label: state.turma || "TODAS",
+        label: turmaEmOperacao || "TODAS",
         valor: payload.producaoMediaHora,
         meta: payload.metaHora,
         escala: escalaDoGrafico([{ valor: payload.producaoMediaHora, meta: payload.metaHora }]),
@@ -315,8 +347,8 @@
     renderGauge(document.getElementById("gaugeTurno"), payload.producaoTurno, payload.metaTurno, COR.verde, COR.verdeTexto);
     renderGauge(document.getElementById("gaugeDia"), payload.producaoDia, payload.metaDia, COR.azulArco, COR.azulTexto);
 
-    // % da meta: uma barra por turma ativa (ou só a selecionada), cada uma
-    // contra a meta do turno — como o eixo "TURMA" do BI.
+    // % da meta: uma barra por turma que operou no dia, cada uma contra a
+    // meta do turno — como o eixo "TURMA" do BI.
     renderMetaChart(document.getElementById("metaAtingidaChart"), linhasTurma);
 
     const tbody = document.querySelector("#tabelaApontamentos tbody");
@@ -352,12 +384,12 @@
 
   async function load() {
     const params = new URLSearchParams();
-    if (state.turma) params.set("turma", state.turma);
+    params.set("turma", turmaPedida()); // letra travada manualmente, ou "auto"
     if (state.maquina) params.set("maquina", state.maquina);
     try {
       const payload = await apiGet("/api/dashboard?" + params.toString());
-      // A turma selecionada sumiu da lista (virou o dia, ou ela não tem mais
-      // apontamento): volta pra "todas" em vez de ficar numa tela zerada.
+      // A turma travada sumiu da lista (virou o dia): volta pro automático
+      // em vez de ficar numa tela zerada.
       if (state.turma && !payload.turmasDisponiveis.includes(state.turma)) {
         state.turma = null;
         return load();
