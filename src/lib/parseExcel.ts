@@ -48,9 +48,19 @@ function normalizeMaquina(raw: unknown): string {
   return digits.padStart(2, "0");
 }
 
+export interface TotalDia {
+  peso: number;
+  linhas: number;
+}
+
 export interface ParseResult {
+  /** Linhas dentro da janela recente (com row_hash), prontas pra gravar em `apontamentos`. */
   rows: Apontamento[];
   warnings: string[];
+  /** Total de peso/linhas por dia (YYYY-MM-DD) de TODAS as linhas válidas lidas, não só da janela. */
+  totaisPorDia: Map<string, TotalDia>;
+  /** Menor data entre as linhas lidas — diz até onde a leitura "cobre" a planilha. */
+  diaMaisAntigo: string | null;
 }
 
 /**
@@ -62,7 +72,10 @@ export interface ParseResult {
  */
 async function linhasDeTabela(table: unknown[][], windowStartISO?: string): Promise<ParseResult> {
   const warnings: string[] = [];
-  if (table.length < 2) return { rows: [], warnings: ["Planilha vazia ou sem linhas de dados."] };
+  const totaisPorDia = new Map<string, TotalDia>();
+  if (table.length < 2) {
+    return { rows: [], warnings: ["Planilha vazia ou sem linhas de dados."], totaisPorDia, diaMaisAntigo: null };
+  }
 
   const headers = (table[0] as unknown[]).map((h) => String(h ?? ""));
   const col = Object.fromEntries(
@@ -79,6 +92,10 @@ async function linhasDeTabela(table: unknown[][], windowStartISO?: string): Prom
 
   const today = todayBrazilISODate();
   const rows: Apontamento[] = [];
+  let diaMaisAntigo: string | null = null;
+  // Quantas vezes a mesma linha (todos os campos iguais) já apareceu — duas
+  // linhas idênticas viram "#1" e "#2" e contam as duas, como o BI faz.
+  const ocorrencias = new Map<string, number>();
 
   for (let r = 1; r < table.length; r++) {
     const line = table[r] as unknown[];
@@ -89,15 +106,11 @@ async function linhasDeTabela(table: unknown[][], windowStartISO?: string): Prom
     const dateCell = dateOnlyCol !== -1 ? get(dateOnlyCol) : null;
     const timeCell = get(col.data_hora);
     const dataHora = combineDateTimeCells(dateCell, timeCell, today);
+    const foraDaJanela = !!windowStartISO && dataHora !== null && dataHora < windowStartISO;
     if (!dataHora) {
       warnings.push(`Linha ${r + 1}: data/hora inválida ou não reconhecida, registro ignorado.`);
       continue;
     }
-    // Fora da janela recente (ex.: dias anteriores) — pula ANTES do hash
-    // (parte mais cara), sem gerar aviso: é poda normal, não erro de dado.
-    // O painel não guarda histórico de linhas, só o suficiente pro dia/turno
-    // atual; a produção do mês é somada à parte (ver producao_mensal).
-    if (windowStartISO && dataHora < windowStartISO) continue;
 
     const loteVal = String(get(col.lote) ?? "").trim();
     const turmaVal = String(get(col.turma) ?? "").trim().toUpperCase();
@@ -105,38 +118,54 @@ async function linhasDeTabela(table: unknown[][], windowStartISO?: string): Prom
     const numeroFardoRaw = get(col.numero_fardo);
     const numeroFardo = numeroFardoRaw === null ? null : toNumber(numeroFardoRaw);
     const peso = toNumber(get(col.peso_seco));
+    const pesoFinal = Number.isFinite(peso) ? peso : 0;
+    const cliente = String(get(col.cliente) ?? "").trim();
+    const produto = String(get(col.produto) ?? "").trim();
 
     if (!loteVal || !turmaVal || !maquinaVal) {
-      warnings.push(`Linha ${r + 1}: faltam campos obrigatórios (lote/turma/máquina), registro ignorado.`);
+      // Fora da janela não vale aviso: é histórico antigo, não dado novo errado.
+      if (!foraDaJanela) warnings.push(`Linha ${r + 1}: faltam campos obrigatórios (lote/turma/máquina), registro ignorado.`);
       continue;
     }
 
-    // A chave usa só a DATA (não o horário completo): o horário do
-    // apontamento às vezes é corrigido depois na planilha, e usar o
-    // timestamp inteiro na chave faria essa correção virar uma linha
-    // "nova" (duplicando a produção no acumulado em vez de atualizar).
-    // TURMA entra na chave porque alguns lotes usam um rótulo genérico
-    // recorrente (ex.: "Prensado") sem número de fardo realmente único —
-    // ainda existe uma margem de erro rara (mesmo lote+fardo+turma+máquina
-    // duas vezes no mesmo dia), documentado no SETUP.md.
-    const rowHash = await sha256Hex(
-      `${loteVal}|${numeroFardo ?? ""}|${turmaVal}|${maquinaVal}|${dataHora.slice(0, 10)}`
-    );
+    // Totais por dia de tudo que foi lido (histórico incluso): é daqui que
+    // sai a produção do mês — recalculada da planilha a cada leitura, então
+    // correções e exclusões feitas na planilha entram no acumulado.
+    const dia = dataHora.slice(0, 10);
+    const total = totaisPorDia.get(dia) ?? { peso: 0, linhas: 0 };
+    total.peso += pesoFinal;
+    total.linhas += 1;
+    totaisPorDia.set(dia, total);
+    if (diaMaisAntigo === null || dia < diaMaisAntigo) diaMaisAntigo = dia;
+
+    // Fora da janela recente (ex.: dias anteriores) — pula ANTES do hash
+    // (parte mais cara), sem gerar aviso: é poda normal, não erro de dado.
+    // O painel não guarda histórico de linhas, só o suficiente pro dia/turno.
+    if (foraDaJanela) continue;
+
+    // A chave é a linha INTEIRA: qualquer correção na planilha (lote, hora,
+    // peso, cliente...) vira uma linha "nova", e a versão antiga some do
+    // banco na reconciliação (ver graphSync.aplicarLeitura). É isso que
+    // faz o painel bater com o BI, que relê a planilha do zero.
+    const chave = [loteVal, numeroFardo ?? "", turmaVal, maquinaVal, dataHora, pesoFinal, cliente, produto].join("|");
+    const n = (ocorrencias.get(chave) ?? 0) + 1;
+    ocorrencias.set(chave, n);
+    const rowHash = await sha256Hex(`${chave}#${n}`);
 
     rows.push({
       lote: loteVal,
-      cliente: String(get(col.cliente) ?? "").trim(),
+      cliente,
       numero_fardo: Number.isFinite(numeroFardo) ? (numeroFardo as number) : null,
       turma: turmaVal,
-      peso_seco: Number.isFinite(peso) ? peso : 0,
+      peso_seco: pesoFinal,
       data_hora: dataHora,
       maquina: maquinaVal,
-      produto: String(get(col.produto) ?? "").trim(),
+      produto,
       row_hash: rowHash,
     });
   }
 
-  return { rows, warnings };
+  return { rows, warnings, totaisPorDia, diaMaisAntigo };
 }
 
 /**
@@ -153,7 +182,9 @@ export async function parseWorkbook(
   const workbook = XLSX.read(new Uint8Array(buffer), { type: "array", cellDates: true });
   const targetSheet = sheetName && workbook.Sheets[sheetName] ? sheetName : workbook.SheetNames[0];
   const sheet = workbook.Sheets[targetSheet as string];
-  if (!sheet) return { rows: [], warnings: [`Aba "${targetSheet}" não encontrada na planilha.`] };
+  if (!sheet) {
+    return { rows: [], warnings: [`Aba "${targetSheet}" não encontrada na planilha.`], totaisPorDia: new Map(), diaMaisAntigo: null };
+  }
 
   // raw:true entrega valores nativos (Date para células de data/hora com
   // cellDates, number para células numéricas) em vez de texto formatado —
@@ -167,7 +198,7 @@ export async function parseWorkbook(
  * Caminho usado pela sincronização automática: recebe só um pedaço da
  * planilha (cabeçalho + últimas N linhas) já como valores, vindo da API de
  * Range do Microsoft Graph — sem baixar/processar o arquivo inteiro. Ver
- * fetchRecentRowsViaGraphRange em graphSync.ts.
+ * buscarLinhasRecentesViaRange em graphSync.ts.
  */
 export async function parseGraphRangeValues(
   headerRow: unknown[],

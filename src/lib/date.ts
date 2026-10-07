@@ -19,6 +19,15 @@ export function daysAgoLocalISOStart(days: number): string {
   return d.toISOString().slice(0, 10) + "T00:00:00";
 }
 
+/** Soma N dias (pode ser negativo) a uma data YYYY-MM-DD, devolvendo YYYY-MM-DD. */
+export function addDaysISODate(dateISO: string, days: number): string {
+  const parts = dateISO.split("-").map(Number);
+  const y = parts[0] ?? 1970;
+  const m = parts[1] ?? 1;
+  const d = parts[2] ?? 1;
+  return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
 /** Início/fim (exclusivo) do dia informado (YYYY-MM-DD), em ISO local "sem Z" — comparável a data_hora armazenada. */
 export function dayBoundsLocal(dateISO: string): { start: string; end: string } {
   const start = `${dateISO}T00:00:00`;

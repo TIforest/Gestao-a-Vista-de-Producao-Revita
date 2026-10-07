@@ -1,10 +1,11 @@
 import type { Env } from "./types";
 import { buildDashboardPayload } from "./lib/dashboard";
-import { runSync, upsertApontamentos, RETENTION_DAYS } from "./lib/graphSync";
+import { runSync, aplicarLeitura, RETENTION_DAYS } from "./lib/graphSync";
 import { parseWorkbook } from "./lib/parseExcel";
 import { buildExportWorkbook } from "./lib/exportXlsx";
 import { isAdminRequest } from "./lib/authAdmin";
 import { dayBoundsLocal, daysAgoLocalISOStart } from "./lib/date";
+import { garantirSchema } from "./lib/schema";
 
 function json(data: unknown, init?: ResponseInit): Response {
   return new Response(JSON.stringify(data), {
@@ -34,19 +35,27 @@ export default {
 
       // Sem token: é só "checar agora", usado pelo botão Atualizar do painel
       // (que qualquer um no chão de fábrica pode clicar) e pelo auto-sync
-      // periódico do navegador. Upload manual e o /api/debug continuam
-      // protegidos, esse não precisa.
+      // periódico do navegador. Upload manual, recontagem e o /api/debug
+      // continuam protegidos, esse não precisa.
       //
       // ?force=1 (só o clique manual do botão) pula a checagem barata de
       // "o arquivo mudou desde a última vez?" e força reler mesmo sem
       // mudança. O auto-sync periódico NÃO usa force: sem ele, quando nada
-      // mudou no SharePoint a checagem é barata (1 consulta ao Graph); com
-      // force sempre reescreveria as linhas da janela inteira no D1 a cada
-      // chamada, mesmo sem nada novo — foi isso que quase estourou a cota
-      // do banco quando o auto-sync passou a rodar de 1 em 1 minuto.
+      // mudou no SharePoint a checagem é barata (1 consulta ao Graph).
       if (pathname === "/api/sync" && request.method === "POST") {
         const force = url.searchParams.get("force") === "1";
         const result = await runSync(env, { force });
+        return json(result);
+      }
+
+      // Recontagem (gestor): relê um trecho bem maior da planilha (padrão
+      // 6000 linhas, ~2 meses) e recalcula os totais diários + a janela
+      // recente a partir dela. Use depois de uma correção antiga na planilha
+      // ou se o mês do painel descolar do BI. ?linhas=N ajusta o tamanho.
+      if (pathname === "/api/recontar" && request.method === "POST") {
+        if (!isAdminRequest(request, env)) return unauthorized();
+        const linhas = Number.parseInt(url.searchParams.get("linhas") ?? "6000", 10) || 6000;
+        const result = await runSync(env, { force: true, linhas });
         return json(result);
       }
 
@@ -59,25 +68,30 @@ export default {
         }
         const buffer = await file.arrayBuffer();
         const windowStart = daysAgoLocalISOStart(RETENTION_DAYS);
-        const { rows, warnings } = await parseWorkbook(buffer, env.MS_SHEET_NAME, windowStart);
-        await upsertApontamentos(env, rows);
+        const parsed = await parseWorkbook(buffer, env.MS_SHEET_NAME, windowStart);
+        // Arquivo inteiro = cobre tudo que tem nele: reconcilia do dia mais
+        // antigo do arquivo em diante.
+        const aplicacao = await aplicarLeitura(env, parsed, windowStart, true);
         await env.DB.prepare(
           `UPDATE sync_state SET last_sync_at = datetime('now'), last_sync_status = 'sincronizado_manual',
            last_sync_rows = ?, last_error = NULL WHERE id = 1`
         )
-          .bind(rows.length)
+          .bind(parsed.rows.length)
           .run();
-        return json({ ok: true, linhas: rows.length, warnings });
+        return json({ ok: true, linhas: parsed.rows.length, warnings: parsed.warnings, aplicacao });
       }
 
       if (pathname === "/api/debug" && request.method === "GET") {
         if (!isAdminRequest(request, env)) return unauthorized();
+        await garantirSchema(env);
         const apontamentos = await env.DB.prepare(
           "SELECT COUNT(*) AS total, MIN(data_hora) AS mais_antigo, MAX(data_hora) AS mais_novo FROM apontamentos"
         ).first();
-        const producaoMensal = await env.DB.prepare("SELECT * FROM producao_mensal ORDER BY ano_mes").all();
+        const producaoDiaria = await env.DB.prepare(
+          "SELECT * FROM producao_diaria ORDER BY dia DESC LIMIT 45"
+        ).all();
         const syncState = await env.DB.prepare("SELECT * FROM sync_state WHERE id = 1").first();
-        return json({ apontamentos, producaoMensal: producaoMensal.results, syncState });
+        return json({ apontamentos, producaoDiaria: producaoDiaria.results, syncState });
       }
 
       if (pathname === "/api/export" && request.method === "GET") {

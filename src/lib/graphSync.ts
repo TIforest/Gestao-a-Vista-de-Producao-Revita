@@ -1,24 +1,41 @@
 import type { Env } from "../types";
 import { encodeSharingUrl } from "./shareLink";
-import { parseWorkbook, parseGraphRangeValues } from "./parseExcel";
-import { daysAgoLocalISOStart } from "./date";
+import { parseGraphRangeValues, type ParseResult, type TotalDia } from "./parseExcel";
+import { addDaysISODate, daysAgoLocalISOStart, todayBrazilISODate } from "./date";
+import { garantirSchema } from "./schema";
 
 // O painel não guarda o histórico completo da planilha — só uma janela
 // recente (cobre o dia atual + margem de segurança pra virada de turno/dia).
-// A produção acumulada do mês fica num contador à parte (producao_mensal),
-// incrementado conforme cada linha nova aparece, sem precisar reprocessar
-// milhares de linhas antigas a cada sincronização.
+// A produção do mês sai da tabela producao_diaria (um total por dia,
+// recalculado da planilha a cada leitura — ver atualizarProducaoDiaria).
 export const RETENTION_DAYS = 3;
 
 // Quantas linhas (de trás pra frente) pedir na sincronização automática.
 // A planilha de origem já passa de 11 mil linhas (todo o histórico desde
-// junho) e cresce ~150-200 linhas/dia — baixar e processar o arquivo
+// junho) e cresce ~100-200 linhas/dia — baixar e processar o arquivo
 // inteiro (como fazíamos antes, via SheetJS) estourava o limite de CPU do
 // Worker sempre que o arquivo mudava. Com a API de Range do Graph, pedimos
 // só as últimas N linhas diretamente à Microsoft (ela computa o recorte do
-// lado dela) — folga generosa sobre RETENTION_DAYS pra cobrir dias mais
-// cheios e retomadas depois de uma parada.
+// lado dela). 1500 linhas ≈ 2 semanas: além de cobrir a janela, é até
+// onde correções feitas na planilha ainda entram no acumulado do mês.
 const LINHAS_RECENTES = 1500;
+// Teto pra recontagem manual (/api/recontar) — só roda a pedido.
+const LINHAS_RECONTAGEM_MAX = 12000;
+// Primeira leitura depois que producao_diaria nasce (ou foi zerada): lê bem
+// mais linhas pra montar o histórico do mês de uma vez, sem depender de
+// alguém chamar /api/recontar. ~2 meses de planilha.
+const LINHAS_BOOTSTRAP = 6000;
+let bootstrapFeito = false;
+
+async function precisaBootstrap(env: Env): Promise<boolean> {
+  if (bootstrapFeito) return false;
+  const row = await env.DB.prepare("SELECT COUNT(*) AS n FROM producao_diaria").first<{ n: number }>();
+  if ((row?.n ?? 0) > 0) {
+    bootstrapFeito = true;
+    return false;
+  }
+  return true;
+}
 
 interface TokenResponse {
   access_token: string;
@@ -119,18 +136,19 @@ async function resolverNomeAba(
 }
 
 /**
- * Busca só as últimas `LINHAS_RECENTES` linhas da planilha via API de Range
- * do Graph — sem baixar o arquivo .xlsx inteiro. Faz 3 chamadas leves:
- * dimensão da área usada (só contagem, sem valores), cabeçalho (1 linha) e
- * o recorte final (N linhas). Cada uma custa bytes/CPU proporcionais só ao
- * que pede, não ao tamanho total da planilha.
+ * Busca só as últimas `linhas` linhas da planilha via API de Range do Graph
+ * — sem baixar o arquivo .xlsx inteiro. Faz 3 chamadas leves: dimensão da
+ * área usada (só contagem, sem valores), cabeçalho (1 linha) e o recorte
+ * final (N linhas). Cada uma custa bytes/CPU proporcionais só ao que pede,
+ * não ao tamanho total da planilha.
  */
 async function buscarLinhasRecentesViaRange(
   env: Env,
   token: string,
   driveId: string,
-  itemId: string
-): Promise<{ headerRow: unknown[]; dataRows: unknown[][] }> {
+  itemId: string,
+  linhas: number
+): Promise<{ headerRow: unknown[]; dataRows: unknown[][]; desdeInicio: boolean }> {
   const sheetName = await resolverNomeAba(driveId, itemId, token, env.MS_SHEET_NAME);
   const sheetPath = `https://graph.microsoft.com/v1.0/drives/${driveId}/items/${itemId}/workbook/worksheets('${encodeURIComponent(sheetName)}')`;
 
@@ -150,7 +168,7 @@ async function buscarLinhasRecentesViaRange(
   const headerData = (await headerRes.json()) as { values: unknown[][] };
   const headerRow = headerData.values[0] ?? [];
 
-  const startRow = Math.max(2, dim.rowCount - LINHAS_RECENTES + 1);
+  const startRow = Math.max(2, dim.rowCount - linhas + 1);
   const dataRes = await fetchWithRetry(
     `${sheetPath}/range(address='A${startRow}:${lastCol}${dim.rowCount}')?$select=values`,
     { headers: { Authorization: `Bearer ${token}` } }
@@ -158,7 +176,16 @@ async function buscarLinhasRecentesViaRange(
   if (!dataRes.ok) throw new Error(`Falha ao ler linhas recentes da planilha (${dataRes.status}): ${await dataRes.text()}`);
   const rangeData = (await dataRes.json()) as { values: unknown[][] };
 
-  return { headerRow, dataRows: rangeData.values };
+  // desdeInicio: o recorte começou na primeira linha de dados, ou seja, a
+  // leitura cobre a planilha inteira (vale pra recontagem).
+  return { headerRow, dataRows: rangeData.values, desdeInicio: startRow === 2 };
+}
+
+export interface AplicacaoResult {
+  novas: number;
+  removidas: number;
+  diasAtualizados: number;
+  coberturaDesde: string | null;
 }
 
 export interface SyncResult {
@@ -167,16 +194,20 @@ export interface SyncResult {
   warnings: string[];
   error?: string;
   sharepointLastModified?: string;
+  aplicacao?: AplicacaoResult;
 }
 
 /**
  * Busca o arquivo do SharePoint via Graph, compara `lastModifiedDateTime` com o
- * que está salvo em sync_state e, se mudou (ou `force`), baixa, faz parse
- * (só a janela recente) e faz upsert em `apontamentos`, incrementando o
- * acumulado mensal para as linhas que forem genuinamente novas.
+ * que está salvo em sync_state e, se mudou (ou `force`), lê as últimas N
+ * linhas, faz parse e aplica no banco (ver aplicarLeitura).
+ *
+ * `linhas`: quantas linhas ler de trás pra frente (padrão LINHAS_RECENTES);
+ * a recontagem manual passa um número maior pra cobrir o mês inteiro.
  */
-export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise<SyncResult> {
+export async function runSync(env: Env, opts: { force?: boolean; linhas?: number } = {}): Promise<SyncResult> {
   try {
+    await garantirSchema(env);
     const token = await getGraphToken(env);
     const shareId = encodeSharingUrl(env.MS_SHARE_URL);
 
@@ -195,7 +226,8 @@ export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise
       }>()
     );
 
-    if (!opts.force && current?.sharepoint_last_modified === meta.lastModifiedDateTime) {
+    const bootstrap = opts.linhas === undefined && (await precisaBootstrap(env));
+    if (!opts.force && !bootstrap && current?.sharepoint_last_modified === meta.lastModifiedDateTime) {
       await comRetry(() =>
         env.DB.prepare(
           "UPDATE sync_state SET last_sync_at = datetime('now'), last_sync_status = 'sem_alteracao', last_error = NULL WHERE id = 1"
@@ -204,28 +236,39 @@ export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise
       return { status: "sem_alteracao", rows: 0, warnings: [], sharepointLastModified: meta.lastModifiedDateTime };
     }
 
-    const { headerRow, dataRows } = await buscarLinhasRecentesViaRange(
+    const linhas = Math.min(
+      LINHAS_RECONTAGEM_MAX,
+      Math.max(1, Math.floor(opts.linhas ?? (bootstrap ? LINHAS_BOOTSTRAP : LINHAS_RECENTES)))
+    );
+    const { headerRow, dataRows, desdeInicio } = await buscarLinhasRecentesViaRange(
       env,
       token,
       meta.parentReference.driveId,
-      meta.id
+      meta.id,
+      linhas
     );
 
     const windowStart = daysAgoLocalISOStart(RETENTION_DAYS);
-    const { rows, warnings } = await parseGraphRangeValues(headerRow, dataRows, windowStart);
-    await upsertApontamentos(env, rows);
-    await pruneOldApontamentos(env, windowStart);
+    const parsed = await parseGraphRangeValues(headerRow, dataRows, windowStart);
+    const aplicacao = await aplicarLeitura(env, parsed, windowStart, desdeInicio);
+    if (aplicacao.diasAtualizados > 0) bootstrapFeito = true;
 
     await comRetry(() =>
       env.DB.prepare(
         `UPDATE sync_state SET sharepoint_last_modified = ?, last_sync_at = datetime('now'),
          last_sync_status = 'sincronizado', last_sync_rows = ?, last_error = NULL WHERE id = 1`
       )
-        .bind(meta.lastModifiedDateTime, rows.length)
+        .bind(meta.lastModifiedDateTime, parsed.rows.length)
         .run()
     );
 
-    return { status: "sincronizado", rows: rows.length, warnings, sharepointLastModified: meta.lastModifiedDateTime };
+    return {
+      status: "sincronizado",
+      rows: parsed.rows.length,
+      warnings: parsed.warnings,
+      sharepointLastModified: meta.lastModifiedDateTime,
+      aplicacao,
+    };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     try {
@@ -244,51 +287,64 @@ export async function runSync(env: Env, opts: { force?: boolean } = {}): Promise
   }
 }
 
-async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof parseWorkbook>>["rows"]): Promise<void> {
+/**
+ * Aplica no banco o que foi lido da planilha, com semântica de CONJUNTO:
+ * nos dias que a leitura cobre por inteiro, o banco fica igual à planilha —
+ * linhas novas entram, linhas que sumiram ou foram corrigidas na planilha
+ * (lote, hora, peso, cliente...) saem. Antes o sync só acrescentava, e
+ * cada correção feita na planilha virava um "fantasma" que inflava a turma
+ * e o mês (foi a causa da divergência com o BI vista em 2026-10-07).
+ *
+ * Também recalcula producao_diaria (um total por dia) pros dias cobertos —
+ * é daí que sai a produção acumulada do mês.
+ *
+ * `desdeInicio`: a leitura começou na primeira linha de dados (planilha
+ * inteira ou upload de arquivo completo). Senão, o dia mais antigo lido
+ * pode estar cortado pela metade e não entra na cobertura.
+ */
+export async function aplicarLeitura(
+  env: Env,
+  parsed: ParseResult,
+  windowStartISO: string,
+  desdeInicio: boolean
+): Promise<AplicacaoResult> {
+  await garantirSchema(env);
+  const coberturaDesde = parsed.diaMaisAntigo === null
+    ? null
+    : desdeInicio
+      ? parsed.diaMaisAntigo
+      : addDaysISODate(parsed.diaMaisAntigo, 1);
+
+  const { novas, removidas } = await reconciliarApontamentos(env, parsed, windowStartISO, coberturaDesde);
+  const diasAtualizados = await atualizarProducaoDiaria(env, parsed.totaisPorDia, coberturaDesde);
+  await pruneOldApontamentos(env, windowStartISO);
+  return { novas, removidas, diasAtualizados, coberturaDesde };
+}
+
+async function reconciliarApontamentos(
+  env: Env,
+  parsed: ParseResult,
+  windowStartISO: string,
+  coberturaDesde: string | null
+): Promise<{ novas: number; removidas: number }> {
+  const existentes = await comRetry(() =>
+    env.DB.prepare("SELECT row_hash, data_hora FROM apontamentos WHERE data_hora >= ?")
+      .bind(windowStartISO)
+      .all<{ row_hash: string; data_hora: string }>()
+  );
+  const hashesPlanilha = new Set(parsed.rows.map((r) => r.row_hash));
+  const hashesBanco = new Set(existentes.results.map((r) => r.row_hash));
+
+  const novas = parsed.rows.filter((r) => !hashesBanco.has(r.row_hash));
+  // Só remove em dias que a leitura cobre por inteiro — num dia cortado pela
+  // metade, uma linha ausente pode só estar antes do recorte.
+  const fantasmas = existentes.results
+    .filter((r) => !hashesPlanilha.has(r.row_hash) && coberturaDesde !== null && r.data_hora.slice(0, 10) >= coberturaDesde)
+    .map((r) => r.row_hash);
+
   const CHUNK = 50;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const chunk = rows.slice(i, i + CHUNK);
-
-    // Descobre quais hashes já existem, pra só somar no acumulado mensal
-    // as linhas genuinamente novas (evita contar de novo em cada sync).
-    // Sem retry aqui de propósito: são ~2-3 chamadas ao D1 por bloco de 50
-    // linhas, dezenas de blocos por sincronização — tentar de novo cada uma
-    // (visto na prática) pode multiplicar o tempo total a ponto do Worker
-    // estourar o limite de recursos quando o D1 está mesmo instável, o que é
-    // pior do que simplesmente falhar rápido e deixar a próxima tentativa
-    // (cron de 1 min, ou o auto-sync do navegador) resolver.
-    const placeholders = chunk.map(() => "?").join(",");
-    const existing = await env.DB.prepare(`SELECT row_hash FROM apontamentos WHERE row_hash IN (${placeholders})`)
-      .bind(...chunk.map((r) => r.row_hash))
-      .all<{ row_hash: string }>();
-    const existingHashes = new Set(existing.results.map((r) => r.row_hash));
-    const novas = chunk.filter((r) => !existingHashes.has(r.row_hash));
-
-    if (novas.length > 0) {
-      const porMes = new Map<string, number>();
-      for (const row of novas) {
-        const anoMes = row.data_hora.slice(0, 7);
-        porMes.set(anoMes, (porMes.get(anoMes) ?? 0) + row.peso_seco);
-      }
-      for (const [anoMes, delta] of porMes) {
-        await env.DB.prepare(
-          `INSERT INTO producao_mensal (ano_mes, total_peso, linhas_contadas, updated_at)
-           VALUES (?, ?, ?, datetime('now'))
-           ON CONFLICT(ano_mes) DO UPDATE SET
-             total_peso = total_peso + excluded.total_peso,
-             linhas_contadas = linhas_contadas + excluded.linhas_contadas,
-             updated_at = excluded.updated_at`
-        )
-          .bind(anoMes, delta, novas.filter((r) => r.data_hora.slice(0, 7) === anoMes).length)
-          .run();
-      }
-    }
-
-    // Só grava as linhas genuinamente novas (mesmo grupo "novas" de cima) —
-    // gravar a janela inteira a cada sync (como fazia antes) reescreve
-    // centenas de linhas sem mudança nenhuma, e com o auto-sync rodando de
-    // 1 em 1 minuto isso sozinho quase estourou a cota de escrita do D1.
-    const stmts = novas.map((row) =>
+  for (let i = 0; i < novas.length; i += CHUNK) {
+    const stmts = novas.slice(i, i + CHUNK).map((row) =>
       env.DB.prepare(
         `INSERT INTO apontamentos (row_hash, lote, cliente, numero_fardo, turma, peso_seco, data_hora, maquina, produto)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -305,12 +361,54 @@ async function upsertApontamentos(env: Env, rows: Awaited<ReturnType<typeof pars
         row.produto
       )
     );
-    if (stmts.length > 0) await env.DB.batch(stmts);
+    await env.DB.batch(stmts);
   }
+
+  const DEL_CHUNK = 100;
+  for (let i = 0; i < fantasmas.length; i += DEL_CHUNK) {
+    const chunk = fantasmas.slice(i, i + DEL_CHUNK);
+    const placeholders = chunk.map(() => "?").join(",");
+    await env.DB.prepare(`DELETE FROM apontamentos WHERE row_hash IN (${placeholders})`).bind(...chunk).run();
+  }
+
+  return { novas: novas.length, removidas: fantasmas.length };
+}
+
+/**
+ * Grava o total de cada dia coberto pela leitura (de `coberturaDesde` até
+ * hoje, ou até o último dia lido, se houver linha com data futura por
+ * engano). Dia coberto sem nenhuma linha vira 0 — se a planilha não tem
+ * nada naquele dia, o painel também não deve ter.
+ */
+async function atualizarProducaoDiaria(
+  env: Env,
+  totaisPorDia: Map<string, TotalDia>,
+  coberturaDesde: string | null
+): Promise<number> {
+  if (coberturaDesde === null) return 0;
+  let ultimoDia = todayBrazilISODate();
+  for (const dia of totaisPorDia.keys()) if (dia > ultimoDia) ultimoDia = dia;
+
+  const stmts: D1PreparedStatement[] = [];
+  for (let dia = coberturaDesde; dia <= ultimoDia; dia = addDaysISODate(dia, 1)) {
+    const t = totaisPorDia.get(dia) ?? { peso: 0, linhas: 0 };
+    stmts.push(
+      env.DB.prepare(
+        `INSERT INTO producao_diaria (dia, total_peso, linhas, updated_at)
+         VALUES (?, ?, ?, datetime('now'))
+         ON CONFLICT(dia) DO UPDATE SET
+           total_peso = excluded.total_peso,
+           linhas = excluded.linhas,
+           updated_at = excluded.updated_at`
+      ).bind(dia, t.peso, t.linhas)
+    );
+    if (stmts.length > 400) break; // trava de segurança contra data absurda
+  }
+  const CHUNK = 100;
+  for (let i = 0; i < stmts.length; i += CHUNK) await env.DB.batch(stmts.slice(i, i + CHUNK));
+  return stmts.length;
 }
 
 async function pruneOldApontamentos(env: Env, windowStartISO: string): Promise<void> {
   await env.DB.prepare("DELETE FROM apontamentos WHERE data_hora < ?").bind(windowStartISO).run();
 }
-
-export { upsertApontamentos };
