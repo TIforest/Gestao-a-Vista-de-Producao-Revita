@@ -187,7 +187,7 @@ export async function buildDashboardPayload(env: Env, filters: DashboardFilters)
   const ultimosRows = await env.DB.prepare(
     `SELECT lote, cliente, numero_fardo, turma, peso_seco, data_hora, maquina, produto
      FROM apontamentos WHERE ${ultimosConds.join(" AND ")}
-     ORDER BY data_hora DESC LIMIT 10`
+     ORDER BY data_hora DESC LIMIT 3`
   )
     .bind(...ultimosArgs)
     .all();

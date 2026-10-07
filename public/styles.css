@@ -30,19 +30,21 @@ body {
 }
 
 /* "Ajustar à página", como o Power BI: em tela grande (TV/monitor) o painel
-   é desenhado num quadro fixo de 1920x1080 e o app.js reduz/amplia o quadro
+   é desenhado num quadro fixo de 1366x768 (tamanho de monitor comum — é o
+   que define o tamanho relativo das letras) e o app.js reduz/amplia o quadro
    inteiro (transform: scale) pra caber na janela, mantendo as proporções.
    Assim a TV mostra exatamente o mesmo layout do computador — inclusive a
-   tabela de apontamentos embaixo, que numa TV com resolução menor ficava
-   fora da tela. Sobras (tela que não é 16:9) ficam pretas. */
+   tabela de apontamentos embaixo. Sobras (tela que não é 16:9) e a margem
+   de segurança contra o corte de borda da TV (ver ajustarEscala) ficam
+   pretas. */
 @media (min-width: 901px) {
   html, body { height: 100%; overflow: hidden; background: var(--bi-preto); }
   .tela {
     position: absolute;
     top: 0;
     left: 0;
-    width: 1920px;
-    height: 1080px;
+    width: 1366px;
+    height: 768px;
     transform-origin: top left;
     background: var(--bi-branco);
     display: flex;
@@ -98,12 +100,12 @@ body {
   gap: 4px;
   padding: 4px;
   background: var(--bi-preto);
-  /* Ocupa exatamente a altura que sobra abaixo do topo (no quadro de
-     1080px): tudo aparece sem rolagem, e só a tabela (última linha da
-     grade) rola por dentro. */
+  /* Ocupa exatamente a altura que sobra abaixo do topo: a tabela (última
+     linha) fica do tamanho das suas 3 linhas, e o que sobra se distribui
+     entre as outras três linhas da grade. */
   flex: 1;
   min-height: 0;
-  grid-template-rows: auto auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto max-content;
 }
 
 .panel {
@@ -151,14 +153,14 @@ body {
 .turma-box:hover { background: #e9fbe9; }
 .turma-box.active { background: var(--bi-verde); color: var(--bi-branco); }
 
-.producao-turma-panel { grid-area: producaoTurma; min-height: 280px; }
+.producao-turma-panel { grid-area: producaoTurma; }
 .mes-panel { grid-area: mes; align-items: center; justify-content: flex-start; text-align: center; }
 .desaguadoras-panel { grid-area: desaguadoras; }
-.hora-panel { grid-area: hora; min-height: 150px; }
+.hora-panel { grid-area: hora; }
 .turno-panel { grid-area: turno; }
 .dia-panel { grid-area: dia; }
 .meta-atingida-panel { grid-area: metaAtingida; }
-.tabela-panel { grid-area: tabela; min-height: 0; padding-top: 6px; }
+.tabela-panel { grid-area: tabela; padding-top: 6px; }
 
 /* --- produção acumulada do mês --- */
 .mes-box {
@@ -188,7 +190,7 @@ body {
 
 /* --- gráficos de barras em par (produção verde sobre meta azul) --- */
 .pbar-chart { display: flex; flex-direction: column; justify-content: center; gap: 22px; flex: 1; padding: 6px 0; }
-.pbar-chart--tall { gap: 20px; }
+.pbar-chart--tall { gap: 16px; }
 .pbar-row { display: flex; align-items: center; gap: 10px; }
 .pbar-row.clickable { cursor: pointer; }
 .pbar-row.selected .pbar-label { color: var(--bi-verde); }
@@ -265,7 +267,7 @@ body {
 .meta-ticks { display: flex; justify-content: space-between; margin-left: 34px; font-size: 0.85rem; font-weight: 800; color: var(--bi-texto); }
 
 /* --- tabela --- */
-.table-wrap { overflow: auto; flex: 1; min-height: 0; }
+.table-wrap { overflow: visible; }
 table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
 thead th {
   background: var(--bi-verde); color: var(--bi-branco);
@@ -311,6 +313,5 @@ tbody tr:nth-child(even) { background: #f0f0f0; }
 
   .pbar-label, .pbar-chart--wide .pbar-label { width: 70px; font-size: 0.78rem; }
   .pbar-text { font-size: 0.8rem; }
-  .producao-turma-panel { min-height: 0; }
-  .table-wrap { max-height: 60vh; }
+  .table-wrap { overflow-x: auto; }
 }

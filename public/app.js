@@ -425,8 +425,18 @@
   });
 
   // "Ajustar à página" (ver .tela no styles.css): em tela grande, escala o
-  // quadro fixo de 1920x1080 pra caber na janela e centraliza as sobras.
+  // quadro fixo de 1366x768 pra caber na janela e centraliza as sobras.
   // Em celular (< 901px) o quadro fica no fluxo normal, sem escala.
+  //
+  // Margem de segurança: TV costuma "cortar" uns 2-5% de cada borda
+  // (overscan) — vimos isso na TV da fábrica, que comia o botão Atualizar
+  // e a coluna Produto. Por padrão deixa 3% de folga em cada lado; dá pra
+  // ajustar pela URL sem mexer no código: ?margem=5 (em %), ou ?margem=0.
+  const QUADRO_W = 1366;
+  const QUADRO_H = 768;
+  const margemParam = Number(new URLSearchParams(window.location.search).get("margem"));
+  const MARGEM = (Number.isFinite(margemParam) && window.location.search.includes("margem=") ? margemParam : 3) / 100;
+
   function ajustarEscala() {
     const tela = document.getElementById("tela");
     if (window.innerWidth < 901) {
@@ -435,10 +445,12 @@
       tela.style.top = "";
       return;
     }
-    const escala = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    const larguraUtil = window.innerWidth * (1 - 2 * MARGEM);
+    const alturaUtil = window.innerHeight * (1 - 2 * MARGEM);
+    const escala = Math.min(larguraUtil / QUADRO_W, alturaUtil / QUADRO_H);
     tela.style.transform = "scale(" + escala + ")";
-    tela.style.left = Math.max(0, (window.innerWidth - 1920 * escala) / 2) + "px";
-    tela.style.top = Math.max(0, (window.innerHeight - 1080 * escala) / 2) + "px";
+    tela.style.left = Math.max(0, (window.innerWidth - QUADRO_W * escala) / 2) + "px";
+    tela.style.top = Math.max(0, (window.innerHeight - QUADRO_H * escala) / 2) + "px";
   }
   window.addEventListener("resize", ajustarEscala);
   ajustarEscala();
