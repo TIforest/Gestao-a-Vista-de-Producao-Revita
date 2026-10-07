@@ -424,6 +424,25 @@
     }
   });
 
+  // "Ajustar à página" (ver .tela no styles.css): em tela grande, escala o
+  // quadro fixo de 1920x1080 pra caber na janela e centraliza as sobras.
+  // Em celular (< 901px) o quadro fica no fluxo normal, sem escala.
+  function ajustarEscala() {
+    const tela = document.getElementById("tela");
+    if (window.innerWidth < 901) {
+      tela.style.transform = "";
+      tela.style.left = "";
+      tela.style.top = "";
+      return;
+    }
+    const escala = Math.min(window.innerWidth / 1920, window.innerHeight / 1080);
+    tela.style.transform = "scale(" + escala + ")";
+    tela.style.left = Math.max(0, (window.innerWidth - 1920 * escala) / 2) + "px";
+    tela.style.top = Math.max(0, (window.innerHeight - 1080 * escala) / 2) + "px";
+  }
+  window.addEventListener("resize", ajustarEscala);
+  ajustarEscala();
+
   load();
   setInterval(load, REFRESH_MS);
   // Redundância: mesmo com o cron do servidor rodando de 1 em 1 minuto,

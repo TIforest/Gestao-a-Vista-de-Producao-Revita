@@ -29,6 +29,27 @@ body {
   color: var(--bi-texto);
 }
 
+/* "Ajustar à página", como o Power BI: em tela grande (TV/monitor) o painel
+   é desenhado num quadro fixo de 1920x1080 e o app.js reduz/amplia o quadro
+   inteiro (transform: scale) pra caber na janela, mantendo as proporções.
+   Assim a TV mostra exatamente o mesmo layout do computador — inclusive a
+   tabela de apontamentos embaixo, que numa TV com resolução menor ficava
+   fora da tela. Sobras (tela que não é 16:9) ficam pretas. */
+@media (min-width: 901px) {
+  html, body { height: 100%; overflow: hidden; background: var(--bi-preto); }
+  .tela {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 1920px;
+    height: 1080px;
+    transform-origin: top left;
+    background: var(--bi-branco);
+    display: flex;
+    flex-direction: column;
+  }
+}
+
 /* --- barra do topo --- */
 .topbar {
   display: flex;
@@ -77,9 +98,11 @@ body {
   gap: 4px;
   padding: 4px;
   background: var(--bi-preto);
-  /* Ocupa exatamente a altura que sobra abaixo do topo: a TV mostra tudo
-     sem rolagem, e só a tabela (última linha da grade) rola por dentro. */
-  height: calc(100vh - 54px);
+  /* Ocupa exatamente a altura que sobra abaixo do topo (no quadro de
+     1080px): tudo aparece sem rolagem, e só a tabela (última linha da
+     grade) rola por dentro. */
+  flex: 1;
+  min-height: 0;
   grid-template-rows: auto auto auto minmax(0, 1fr);
 }
 
@@ -261,7 +284,7 @@ tbody tr:nth-child(even) { background: #f0f0f0; }
 
 @media (max-width: 900px) {
   .grid {
-    height: auto;
+    flex: none;
     min-height: calc(100vh - 54px);
     grid-template-columns: 1fr;
     grid-template-rows: none;
