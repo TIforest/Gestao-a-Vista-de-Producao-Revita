@@ -301,14 +301,16 @@
     mesLabel.textContent = MONTH_NAMES[Number(m) - 1];
     mesLabel.title = `${MONTH_NAMES[Number(m) - 1]} ${y}`;
 
-    // Produção x turma: todas as turmas que operaram no dia (a que está em
-    // operação fica destacada), cada uma contra a meta fixa do turno —
-    // tudo na mesma escala. Não filtra: a turma anterior continua visível
-    // pra comparação, como no BI quando as duas já lançaram.
+    // Produção x turma: só a turma em operação (automática ou travada no
+    // clique), contra a meta fixa do turno — como no BI, que mostra só a
+    // turma selecionada. Sem turma (dia ainda sem apontamento), mostra
+    // todas as que a lista trouxer.
     const turmaEmOperacao = payload.filtros.turma;
     const turmaChart = document.getElementById("producaoTurmaChart");
     turmaChart.innerHTML = "";
-    const linhasTurma = payload.producaoPorTurma;
+    const linhasTurma = turmaEmOperacao
+      ? payload.producaoPorTurma.filter((r) => r.turma === turmaEmOperacao)
+      : payload.producaoPorTurma;
     const escalaTurma = escalaDoGrafico(linhasTurma);
     for (const r of linhasTurma) {
       turmaChart.appendChild(
@@ -347,8 +349,8 @@
     renderGauge(document.getElementById("gaugeTurno"), payload.producaoTurno, payload.metaTurno, COR.verde, COR.verdeTexto);
     renderGauge(document.getElementById("gaugeDia"), payload.producaoDia, payload.metaDia, COR.azulArco, COR.azulTexto);
 
-    // % da meta: uma barra por turma que operou no dia, cada uma contra a
-    // meta do turno — como o eixo "TURMA" do BI.
+    // % da meta: só a turma em operação (mesma lista de cima), contra a
+    // meta do turno — como no BI.
     renderMetaChart(document.getElementById("metaAtingidaChart"), linhasTurma);
 
     const tbody = document.querySelector("#tabelaApontamentos tbody");
