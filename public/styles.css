@@ -127,6 +127,11 @@ body {
 /* --- turmas (coluna da esquerda, caixas verdes que preenchem a altura) --- */
 .turmas-panel { grid-area: turmas; padding: 8px 6px 10px; }
 .turmas-modo {
+  /* Oculto a pedido (07/10): o "automático / manual · N min" estava sendo
+     confundido com a atualização do programa. A lógica continua: a turma
+     em operação é automática e um clique trava por 10 min. O texto segue
+     no DOM só como title da caixa (passa o mouse e vê). */
+  display: none;
   text-align: center;
   font-size: 0.68rem;
   text-transform: uppercase;
